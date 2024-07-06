@@ -32,7 +32,7 @@ def get_media_url(media_id):
     headers = {
         "Authorization": f"Bearer {whatsapp_token}",
     }
-    url = f"https://graph.facebook.com/v16.0/{media_id}/"
+    url = f"https://graph.facebook.com/v19.0/{media_id}/"
     response = requests.get(url, headers=headers)
     print(f"media id response: {response.json()}")
     return response.json()["url"]
@@ -89,7 +89,7 @@ def send_whatsapp_message(body, message):
         "Authorization": f"Bearer {whatsapp_token}",
         "Content-Type": "application/json",
     }
-    url = "https://graph.facebook.com/v15.0/" + phone_number_id + "/messages"
+    url = "https://graph.facebook.com/v19.0/" + phone_number_id + "/messages"
     data = {
         "messaging_product": "whatsapp",
         "to": from_number,
