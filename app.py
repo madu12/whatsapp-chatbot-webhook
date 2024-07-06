@@ -25,11 +25,21 @@ def read_root():
     return {"message": "WhatsApp Webhook API is running"}
 
 @app.get("/webhook")
-async def verify_token(hub_mode: str, hub_challenge: str, hub_verify_token: str):
-    logger.info(f"Verification request received: hub_mode={hub_mode}, hub_verify_token={hub_verify_token}")
-    if hub_verify_token == VERIFY_TOKEN and hub_mode == "subscribe":
-        return hub_challenge
-    raise HTTPException(status_code=400, detail="Invalid verification token")
+async def verify_token(request: Request):
+    mode = request.query_params.get("hub.mode")
+    token = request.query_params.get("hub.verify_token")
+    challenge = request.query_params.get("hub.challenge")
+
+    if mode and token:
+        if mode == "subscribe" and token == VERIFY_TOKEN:
+            logger.info("WEBHOOK_VERIFIED")
+            return challenge
+        else:
+            logger.warning("VERIFICATION_FAILED")
+            return {"status": "error", "message": "Verification failed"}, 403
+    else:
+        logger.error("MISSING_PARAMETER")
+        return {"status": "error", "message": "Missing parameters"}, 400
 
 @app.post("/webhook")
 async def handle_incoming_message(request: Request):
