@@ -1,7 +1,3 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
-# More info on Python, GitHub Actions, and Azure App Service: https://aka.ms/python-webapps-actions
-
 name: Build and deploy Python app to Azure Web App - whatsapp-chatbot-webhook
 
 on:
@@ -45,7 +41,7 @@ jobs:
     needs: build
     environment: Production
     permissions:
-      id-token: write #This is required for requesting the JWT
+      id-token: write # This is required for requesting the JWT
       contents: read
 
     steps:
@@ -64,10 +60,18 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_100447C9CB4C48BB9451D7A0297AF3CB }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_A0AEFD2DA43647679691621536DC15B1 }}
 
-      - name: 'Deploy to Azure Web App'
+      - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v2
         id: deploy-to-webapp
         with:
           app-name: 'whatsapp-chatbot-webhook'
-          slot-name: 'Production'
+          slot-name: 'production'
           package: release.zip
+
+      - name: Install ffmpeg on Azure Web App
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_WEBAPP_NAME }}.scm.azurewebsites.net "sudo apt-get update && sudo apt-get install -y ffmpeg"
+
+      - name: Restart Azure Web App
+        run: |
+          az webapp restart --name ${{ secrets.AZURE_WEBAPP_NAME }} --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }}
