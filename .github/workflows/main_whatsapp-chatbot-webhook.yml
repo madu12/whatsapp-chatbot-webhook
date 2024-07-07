@@ -73,13 +73,14 @@ jobs:
           echo "sudo apt-get update && sudo apt-get install -y ffmpeg" > install_ffmpeg.sh
           chmod +x install_ffmpeg.sh
 
-      - name: Copy install script to Azure Web App
+      - name: Upload install script to Azure Web App
         run: |
-          scp -o StrictHostKeyChecking=no install_ffmpeg.sh ${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_WEBAPP_NAME }}.scm.azurewebsites.net:/home/site/wwwroot/
+          az webapp config appsettings set --name ${{ secrets.AZURE_WEBAPP_NAME }} --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --settings SCM_DO_BUILD_DURING_DEPLOYMENT=true
+          az webapp deployment source config-zip --name ${{ secrets.AZURE_WEBAPP_NAME }} --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --src-path install_ffmpeg.sh
 
       - name: Execute install script on Azure Web App
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_WEBAPP_NAME }}.scm.azurewebsites.net "bash /home/site/wwwroot/install_ffmpeg.sh"
+          az webapp ssh --name ${{ secrets.AZURE_WEBAPP_NAME }} --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --command "bash /home/site/wwwroot/install_ffmpeg.sh"
 
       - name: Restart Azure Web App
         run: |
