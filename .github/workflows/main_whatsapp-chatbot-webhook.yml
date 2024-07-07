@@ -68,19 +68,9 @@ jobs:
           slot-name: 'production'
           package: release.zip
 
-      - name: Create install script
+      - name: Install ffmpeg on Azure Web App
         run: |
-          echo "sudo apt-get update && sudo apt-get install -y ffmpeg" > install_ffmpeg.sh
-          chmod +x install_ffmpeg.sh
-
-      - name: Upload install script to Azure Web App
-        run: |
-          az webapp config appsettings set --name ${{ secrets.AZURE_WEBAPP_NAME }} --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --settings SCM_DO_BUILD_DURING_DEPLOYMENT=true
-          az webapp deployment source config-zip --name ${{ secrets.AZURE_WEBAPP_NAME }} --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --src-path install_ffmpeg.sh
-
-      - name: Execute install script on Azure Web App
-        run: |
-          az webapp ssh --name ${{ secrets.AZURE_WEBAPP_NAME }} --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --command "bash /home/site/wwwroot/install_ffmpeg.sh"
+          ssh -o StrictHostKeyChecking=no ${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_WEBAPP_NAME }}.scm.azurewebsites.net "sudo apt-get update && sudo apt-get install -y ffmpeg"
 
       - name: Restart Azure Web App
         run: |
