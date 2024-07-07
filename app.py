@@ -95,10 +95,10 @@ def send_whatsapp_message(body, message):
 def handle_whatsapp_message(body):
     message = body["entry"][0]["changes"][0]["value"]["messages"][0]
     if message["type"] == "text":
-        response = 'Your message ' + message["text"]["body"]
+        message_body = 'Your message ' + message["text"]["body"]
     elif message["type"] == "audio":
         audio_id = message["audio"]["id"]
-        response = 'Your message ' + handle_audio_message(audio_id)
+        message_body = 'Your message ' + handle_audio_message(audio_id)
     else:
         message_body = 'This chatbot only supports text and audio messages.'
     response = message_body
