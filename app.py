@@ -10,20 +10,13 @@ from flask import Flask, jsonify, request
 app = Flask(__name__)
 
 
-# OpenAi API key
-openai.api_key = os.getenv("OPENAI_API_KEY")
-
 # Access token for your WhatsApp business account app
 whatsapp_token = os.environ.get("WHATSAPP_TOKEN")
 
 # Verify Token defined when configuring the webhook
 verify_token = os.environ.get("VERIFY_TOKEN")
 
-# Message log dictionary to enable conversation over multiple messages
-message_log_dict = {}
-
 # language for speech to text recoginition
-# TODO: detect this automatically based on the user's language
 LANGUGAGE = "en-US"
 
 
@@ -34,7 +27,6 @@ def get_media_url(media_id):
     }
     url = f"https://graph.facebook.com/v19.0/{media_id}/"
     response = requests.get(url, headers=headers)
-    print(f"media id response: {response.json()}")
     return response.json()["url"]
 
 
@@ -44,7 +36,6 @@ def download_media_file(media_url):
         "Authorization": f"Bearer {whatsapp_token}",
     }
     response = requests.get(media_url, headers=headers)
-    print(f"first 10 digits of the media file: {response.content[:10]}")
     return response.content
 
 
@@ -55,7 +46,6 @@ def convert_audio_bytes(audio_bytes):
     wav_bytes = ogg_audio.export(format="wav").read()
     audio_data, sample_rate = sf.read(io.BytesIO(wav_bytes), dtype="int32")
     sample_width = audio_data.dtype.itemsize
-    print(f"audio sample_rate:{sample_rate}, sample_width:{sample_width}")
     audio = sr.AudioData(audio_data, sample_rate, sample_width)
     return audio
 
@@ -73,10 +63,7 @@ def handle_audio_message(audio_id):
     audio_bytes = download_media_file(audio_url)
     audio_data = convert_audio_bytes(audio_bytes)
     audio_text = recognize_audio(audio_data)
-    message = (
-        "Please summarize the following message in its original language "
-        f"as a list of bullet-points: {audio_text}"
-    )
+    message = audio_text
     return message
 
 
@@ -97,56 +84,20 @@ def send_whatsapp_message(body, message):
         "text": {"body": message},
     }
     response = requests.post(url, json=data, headers=headers)
-    print(f"whatsapp message response: {response.json()}")
     response.raise_for_status()
-
-
-# create a message log for each phone number and return the current message log
-def update_message_log(message, phone_number, role):
-    initial_log = {
-        "role": "system",
-        "content": "You are a helpful assistant named WhatsBot.",
-    }
-    if phone_number not in message_log_dict:
-        message_log_dict[phone_number] = [initial_log]
-    message_log = {"role": role, "content": message}
-    message_log_dict[phone_number].append(message_log)
-    return message_log_dict[phone_number]
-
-
-# remove last message from log if OpenAI request fails
-def remove_last_message_from_log(phone_number):
-    message_log_dict[phone_number].pop()
-
-
-# make request to OpenAI
-def make_openai_request(message, from_number):
-    try:
-        message_log = update_message_log(message, from_number, "user")
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=message_log,
-            temperature=0.7,
-        )
-        response_message = response.choices[0].message.content
-        print(f"openai response: {response_message}")
-        update_message_log(response_message, from_number, "assistant")
-    except Exception as e:
-        print(f"openai error: {e}")
-        response_message = "Sorry, the OpenAI API is currently overloaded or offline. Please try again later."
-        remove_last_message_from_log(from_number)
-    return response_message
 
 
 # handle WhatsApp messages of different type
 def handle_whatsapp_message(body):
     message = body["entry"][0]["changes"][0]["value"]["messages"][0]
     if message["type"] == "text":
-        message_body = message["text"]["body"]
+        response = 'Your message ' + message["text"]["body"]
     elif message["type"] == "audio":
         audio_id = message["audio"]["id"]
-        message_body = handle_audio_message(audio_id)
-    response = make_openai_request(message_body, message["from"])
+        response = 'Your message ' + handle_audio_message(audio_id)
+    else:
+        message_body = 'This chatbot only supports text and audio messages.'
+    response = message_body
     send_whatsapp_message(body, response)
 
 
@@ -154,7 +105,6 @@ def handle_whatsapp_message(body):
 def handle_message(request):
     # Parse Request body in json format
     body = request.get_json()
-    print(f"request body: {body}")
 
     try:
         # info on WhatsApp text message payload:
@@ -209,7 +159,7 @@ def verify(request):
 # Sets homepage endpoint and welcome message
 @app.route("/", methods=["GET"])
 def home():
-    return "WhatsApp OpenAI Webhook is listening!"
+    return "WhatsApp Webhook is listening!"
 
 # Accepts POST and GET requests at /webhook endpoint
 @app.route("/webhook", methods=["POST", "GET"])
@@ -218,14 +168,6 @@ def webhook():
         return verify(request)
     elif request.method == "POST":
         return handle_message(request)
-
-
-# Route to reset message log
-@app.route("/reset", methods=["GET"])
-def reset():
-    global message_log_dict
-    message_log_dict = {}
-    return "Message log resetted!"
 
 
 if __name__ == "__main__":
