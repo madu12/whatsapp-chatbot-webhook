@@ -68,9 +68,18 @@ jobs:
           slot-name: 'production'
           package: release.zip
 
-      - name: Install ffmpeg on Azure Web App
+      - name: Create install script
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_WEBAPP_NAME }}.scm.azurewebsites.net "sudo apt-get update && sudo apt-get install -y ffmpeg"
+          echo "sudo apt-get update && sudo apt-get install -y ffmpeg" > install_ffmpeg.sh
+          chmod +x install_ffmpeg.sh
+
+      - name: Copy install script to Azure Web App
+        run: |
+          scp -o StrictHostKeyChecking=no install_ffmpeg.sh ${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_WEBAPP_NAME }}.scm.azurewebsites.net:/home/site/wwwroot/
+
+      - name: Execute install script on Azure Web App
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.AZURE_SSH_USER }}@${{ secrets.AZURE_WEBAPP_NAME }}.scm.azurewebsites.net "bash /home/site/wwwroot/install_ffmpeg.sh"
 
       - name: Restart Azure Web App
         run: |
