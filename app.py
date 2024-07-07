@@ -27,6 +27,7 @@ def get_media_url(media_id):
     }
     url = f"https://graph.facebook.com/v19.0/{media_id}/"
     response = requests.get(url, headers=headers)
+    print(f"media id response: {response.json()}")
     return response.json()["url"]
 
 
@@ -36,6 +37,7 @@ def download_media_file(media_url):
         "Authorization": f"Bearer {whatsapp_token}",
     }
     response = requests.get(media_url, headers=headers)
+    print(f"first 10 digits of the media file: {response.content[:10]}")
     return response.content
 
 
@@ -46,6 +48,7 @@ def convert_audio_bytes(audio_bytes):
     wav_bytes = ogg_audio.export(format="wav").read()
     audio_data, sample_rate = sf.read(io.BytesIO(wav_bytes), dtype="int32")
     sample_width = audio_data.dtype.itemsize
+    print(f"audio sample_rate:{sample_rate}, sample_width:{sample_width}")
     audio = sr.AudioData(audio_data, sample_rate, sample_width)
     return audio
 
@@ -84,6 +87,7 @@ def send_whatsapp_message(body, message):
         "text": {"body": message},
     }
     response = requests.post(url, json=data, headers=headers)
+    print(f"whatsapp message response: {response.json()}")
     response.raise_for_status()
 
 
@@ -105,6 +109,7 @@ def handle_whatsapp_message(body):
 def handle_message(request):
     # Parse Request body in json format
     body = request.get_json()
+    print(f"request body: {body}")
 
     try:
         # info on WhatsApp text message payload:
