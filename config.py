@@ -1,0 +1,11 @@
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+DIALOGFLOW_CX_CREDENTIALS = os.getenv("DIALOGFLOW_CX_CREDENTIALS")
+DIALOGFLOW_CX_AGENTID = os.getenv("DIALOGFLOW_CX_AGENTID")
+DIALOGFLOW_CX_LOCATION = os.getenv("DIALOGFLOW_CX_LOCATION")
+WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
+VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
+LANGUAGE = os.getenv("LANGUAGE", "en-US")
