@@ -35,6 +35,6 @@ class WhatsAppController:
             self.process_text_message(chatbot_phone_number, recipient_number, interactive_message)
         else:
             response_message = 'This chatbot only supports text and interactive messages.'
-            self.whatsapp_client.send_whatsapp_message(chatbot_phone_number, recipient_number, {"type": "text", "text": {"body": response_message}})
+            self.whatsapp_client.send_whatsapp_message(chatbot_phone_number, recipient_number, response_message)
             
         return {"status": "ok"}
