@@ -1,17 +1,17 @@
 import os
 import json
-import logging
 from flask import Flask, jsonify, request
 from controllers.whatsapp_controller import WhatsAppController
-from config import VERIFY_TOKEN
+from config import VERIFY_TOKEN, WHATSAPP_TOKEN
 
 app = Flask(__name__)
 
-# Configure logging
-logging.basicConfig(level=logging.DEBUG)
-
 # Instantiate WhatsApp controller
 whatsapp_controller = WhatsAppController()
+
+# In-memory store for processed message IDs (for demonstration purposes)
+# For a production system, consider using a persistent store like a database.
+processed_message_ids = set()
 
 # Required webhook verification for WhatsApp
 @app.route("/", methods=["GET"])
@@ -45,6 +45,7 @@ def webhook():
 
     elif request.method == "POST":
         body = request.get_json()
+        print(f"Received POST request with body: {body}")
         try:
             if body.get("object"):
                 entries = body.get("entry", [])
@@ -53,6 +54,12 @@ def webhook():
                     for change in changes:
                         value = change.get("value", {})
                         if "messages" in value:
+                            message_id = value["messages"][0]["id"]
+                            if message_id in processed_message_ids:
+                                print(f"Message {message_id} already processed.")
+                                return jsonify({"status": "ok"}), 200
+
+                            processed_message_ids.add(message_id)
                             response = whatsapp_controller.handle_whatsapp_message(body)
                             return jsonify(response), 200
                         elif "statuses" in value:
@@ -64,8 +71,9 @@ def webhook():
             else:
                 return jsonify({"status": "error", "message": "Not a WhatsApp API event"}), 404
         except Exception as e:
+            print(f"Error processing request: {e}")
             return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 8000))  # Ensure PORT environment variable is used if set
+    port = int(os.environ.get('PORT', 8000))
     app.run(host='0.0.0.0', port=port, debug=True, use_reloader=True)
