@@ -1,3 +1,5 @@
+# controllers/whatsapp_controller.py
+
 from models.whatsapp_client import WhatsAppClient
 from controllers.dialogflow_controller import DialogflowController
 
@@ -5,6 +7,7 @@ class WhatsAppController:
     def __init__(self):
         self.whatsapp_client = WhatsAppClient()
         self.dialogflow_controller = DialogflowController()
+        self.processed_message_ids = set()  # Use a set to track processed message IDs
     
     def process_text_message(self, chatbot_phone_number, recipient_number, recipient_message):
         dialogflow_response = self.dialogflow_controller.handle_message(recipient_message, recipient_number)
@@ -26,6 +29,12 @@ class WhatsAppController:
         message = value["messages"][0]
         recipient_number = value["contacts"][0]["wa_id"]
         chatbot_phone_number = value["metadata"]["phone_number_id"]
+        message_id = message["id"]
+
+        if message_id in self.processed_message_ids:
+            return {"status": "ok"}
+
+        self.processed_message_ids.add(message_id)
 
         if message["type"] == "text":
             recipient_message = message["text"]["body"]
