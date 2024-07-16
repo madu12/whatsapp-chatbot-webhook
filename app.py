@@ -1,4 +1,5 @@
 import os
+import json
 import logging
 from flask import Flask, jsonify, request
 from controllers.whatsapp_controller import WhatsAppController
@@ -8,13 +9,6 @@ app = Flask(__name__)
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
-
-# Log environment variables for debugging purposes
-logging.debug(f"VERIFY_TOKEN: {VERIFY_TOKEN}")
-logging.debug(f"DIALOGFLOW_CX_CREDENTIALS: {os.getenv('DIALOGFLOW_CX_CREDENTIALS')}")
-logging.debug(f"WHATSAPP_TOKEN: {os.getenv('WHATSAPP_TOKEN')}")
-logging.debug(f"DIALOGFLOW_CX_AGENTID: {os.getenv('DIALOGFLOW_CX_AGENTID')}")
-logging.debug(f"DIALOGFLOW_CX_LOCATION: {os.getenv('DIALOGFLOW_CX_LOCATION')}")
 
 # Instantiate WhatsApp controller
 whatsapp_controller = WhatsAppController()
@@ -51,7 +45,6 @@ def webhook():
 
     elif request.method == "POST":
         body = request.get_json()
-        logging.debug(f"Received POST request with body: {body}")
         try:
             if body.get("object"):
                 entries = body.get("entry", [])
@@ -71,8 +64,8 @@ def webhook():
             else:
                 return jsonify({"status": "error", "message": "Not a WhatsApp API event"}), 404
         except Exception as e:
-            logging.error(f"Error processing POST request: {e}")
             return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == "__main__":
-    app.run(debug=True, use_reloader=True)
+    port = int(os.environ.get('PORT', 8000))  # Ensure PORT environment variable is used if set
+    app.run(host='0.0.0.0', port=port, debug=True, use_reloader=True)
