@@ -2,12 +2,14 @@ import os
 import json
 from flask import Flask, jsonify, request
 from controllers.whatsapp_controller import WhatsAppController
-from config import VERIFY_TOKEN, WHATSAPP_TOKEN
+from controllers.dialogflow_controller import DialogflowController
+from config import VERIFY_TOKEN
 
 app = Flask(__name__)
 
-# Instantiate WhatsApp controller
+# Instantiate WhatsApp controller and Dialogflow controller
 whatsapp_controller = WhatsAppController()
+dialogflow_controller = DialogflowController()
 
 # In-memory store for processed message IDs (for demonstration purposes)
 # For a production system, consider using a persistent store like a database.
@@ -45,7 +47,6 @@ def webhook():
 
     elif request.method == "POST":
         body = request.get_json()
-        print(f"Received POST request with body: {body}")
         try:
             if body.get("object"):
                 entries = body.get("entry", [])
@@ -74,6 +75,16 @@ def webhook():
             print(f"Error processing request: {e}")
             return jsonify({"status": "error", "message": str(e)}), 500
 
+# Dialogflow webhook endpoint
+@app.route("/dialogflow_webhook", methods=["POST"])
+def dialogflow_webhook():
+    body = request.get_json()
+    # print(f"Received POST request from Dialogflow with body: {body}")
+    try:
+        response = dialogflow_controller.handle_dialogflow_webhook(body)
+        return jsonify(response), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 8000))
     app.run(host='0.0.0.0', port=port, debug=True, use_reloader=True)

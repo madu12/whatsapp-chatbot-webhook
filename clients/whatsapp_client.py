@@ -6,8 +6,8 @@ class WhatsAppClient:
     def __init__(self):
         self.whatsapp_token = WHATSAPP_TOKEN
         self.language = LANGUAGE
-        
-    def send_whatsapp_message(self, phone_number_id, from_number, message, interactive=False):
+
+    def send_whatsapp_message(self, phone_number_id, from_number, message, message_type='text'):
         headers = {
             "Authorization": f"Bearer {self.whatsapp_token}",
             "Content-Type": "application/json",
@@ -18,9 +18,9 @@ class WhatsAppClient:
             "recipient_type": "individual",
             "to": from_number,
         }
-        if interactive:
+        if message_type == 'interactive':
             data.update({"type": "interactive", "interactive": message["interactive"]})
         else:
-            data.update(message)
+            data.update({"type": "text", "text": {"preview_url": False, "body": message}})
         response = requests.post(url, json=data, headers=headers)
         response.raise_for_status()
