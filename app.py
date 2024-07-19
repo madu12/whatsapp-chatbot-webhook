@@ -1,28 +1,33 @@
 import os
-import json
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template
 from controllers.whatsapp_controller import WhatsAppController
 from controllers.dialogflow_controller import DialogflowController
 from config import VERIFY_TOKEN
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='assets')
 
 # Instantiate WhatsApp controller and Dialogflow controller
 whatsapp_controller = WhatsAppController()
 dialogflow_controller = DialogflowController()
 
-# In-memory store for processed message IDs (for demonstration purposes)
-# For a production system, consider using a persistent store like a database.
+# In-memory store for processed message IDs
 processed_message_ids = set()
 
-# Required webhook verification for WhatsApp
 @app.route("/", methods=["GET"])
 def home():
-    return "WhatsApp Webhook is listening!"
+    """
+    Home route to load the static HTML page.
+    """
+    return render_template("index.html")
 
-# Accepts POST and GET requests at /webhook endpoint
 @app.route("/webhook", methods=["POST", "GET"])
 def webhook():
+    """
+    Webhook endpoint for WhatsApp.
+
+    GET: Handles webhook verification.
+    POST: Processes incoming messages and statuses.
+    """
     if request.method == "GET":
         # Parse params from the webhook verification request
         mode = request.args.get("hub.mode")
@@ -33,15 +38,12 @@ def webhook():
         if mode and token:
             # Check the mode and token sent are correct
             if mode == "subscribe" and token == VERIFY_TOKEN:
-                # Respond with 200 OK and challenge token from the request
                 print("WEBHOOK_VERIFIED")
                 return challenge, 200
             else:
-                # Responds with '403 Forbidden' if verify tokens do not match
                 print("VERIFICATION_FAILED")
                 return jsonify({"status": "error", "message": "Verification failed"}), 403
         else:
-            # Responds with '400 Bad Request' if verify tokens do not match
             print("MISSING_PARAMETER")
             return jsonify({"status": "error", "message": "Missing parameters"}), 400
 
@@ -75,16 +77,21 @@ def webhook():
             print(f"Error processing request: {e}")
             return jsonify({"status": "error", "message": str(e)}), 500
 
-# Dialogflow webhook endpoint
 @app.route("/dialogflow_webhook", methods=["POST"])
 def dialogflow_webhook():
+    """
+    Webhook endpoint for Dialogflow.
+
+    POST: Processes incoming webhook requests from Dialogflow.
+    """
     body = request.get_json()
-    # print(f"Received POST request from Dialogflow with body: {body}")
     try:
         response = dialogflow_controller.handle_dialogflow_webhook(body)
         return jsonify(response), 200
     except Exception as e:
+        print(f"Error processing Dialogflow webhook: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
+
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 8000))
     app.run(host='0.0.0.0', port=port, debug=True, use_reloader=True)

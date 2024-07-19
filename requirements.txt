@@ -3,3 +3,4 @@ python-dotenv==1.0.1
 google-cloud-dialogflow-cx==1.34.1
 sqlalchemy==2.0.31
 pyodbc==5.1.0
+stripe==10.4.0
