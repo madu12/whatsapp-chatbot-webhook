@@ -3,6 +3,9 @@ import stripe
 
 class StripeClient:
     def __init__(self):
+        """
+        Initialize the StripeClient with the necessary credentials.
+        """
         self.website_url = WEBSITE_URL
         stripe.api_key = STRIPE_SECRET_KEY
 
@@ -66,6 +69,16 @@ class StripeClient:
                         'enabled': True,
                     },
                 },
+                metadata={
+                    'job_id': checkout_session_data['job_id'],
+                    'job_description': checkout_session_data['job_description'],
+                    'job_category': checkout_session_data['job_category'],
+                    'job_date': checkout_session_data['job_date'],
+                    'job_time': checkout_session_data['job_time'],
+                    'job_amount': checkout_session_data['total_amount'],
+                    'recipient_number': checkout_session_data['recipient_number'],
+                    'user_id': checkout_session_data['user_id']
+                }
             )
 
             return checkout_session

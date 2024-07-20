@@ -1,14 +1,20 @@
 import os
-from flask import Flask, jsonify, request, render_template
+import stripe
+from database.repositories import JobRepository, AddressRepository
+from flask import Flask, jsonify, request, render_template, render_template_string, redirect,url_for
 from controllers.whatsapp_controller import WhatsAppController
+from clients.whatsapp_client import WhatsAppClient
 from controllers.dialogflow_controller import DialogflowController
-from config import VERIFY_TOKEN
+from config import WHATSAPP_CHATBOT_PHONE_NUMBER, WHATSAPP_VERIFY_TOKEN,  STRIPE_SECRET_KEY
 
 app = Flask(__name__, static_folder='assets')
 
-# Instantiate WhatsApp controller and Dialogflow controller
+stripe.api_key = STRIPE_SECRET_KEY
+
+# Instantiate WhatsApp controller, WhatsApp client, Dialogflow controller
 whatsapp_controller = WhatsAppController()
 dialogflow_controller = DialogflowController()
+whatsapp_client = WhatsAppClient()
 
 # In-memory store for processed message IDs
 processed_message_ids = set()
@@ -37,7 +43,7 @@ def webhook():
         # Check if a token and mode were sent
         if mode and token:
             # Check the mode and token sent are correct
-            if mode == "subscribe" and token == VERIFY_TOKEN:
+            if mode == "subscribe" and token == WHATSAPP_VERIFY_TOKEN:
                 print("WEBHOOK_VERIFIED")
                 return challenge, 200
             else:
@@ -91,6 +97,48 @@ def dialogflow_webhook():
     except Exception as e:
         print(f"Error processing Dialogflow webhook: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/success', methods=['GET'])
+def order_success():
+    payment_id = request.args.get('paymentID')
+    if not payment_id:
+        return redirect(url_for('home'))
+
+    session = stripe.checkout.Session.retrieve(payment_id)
+    customer_address=session.customer_details.address
+
+    if session and customer_address:
+        address_data = {
+            "street": f"{customer_address.line1} {customer_address.line2 if customer_address.line2 else ''}",
+            "city": customer_address.city,
+            "postal_code": customer_address.postal_code,
+            "state": customer_address.state,
+            "country": customer_address.country
+        }
+
+        address_repo = AddressRepository()
+        result = address_repo.register_address(address_data, session.metadata.user_id)
+
+        address_id = result['address_data'].id if result['address_data'] else None
+
+        update_job_data = {
+            'payment_status': 'authorized',
+            'payment_intent': session.payment_intent,
+            'address_id': address_id
+        }
+        where_criteria = {"id": int(session.metadata.job_id), "payment_status": 'unpaid'}
+
+        job = JobRepository.update_job(where_criteria, update_job_data)
+        if job:
+            whatsapp_controller.notify_payment_success( session, customer_address)
+
+        return render_template(
+            'success.html',
+            customer_address=customer_address,
+            session=session
+        )
+    else:
+        return redirect(url_for('home'))
 
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 8000))

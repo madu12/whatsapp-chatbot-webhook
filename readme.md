@@ -52,6 +52,7 @@ pip install -r requirements.txt
 ### Set Up Environment Variables
 Create a .env file in the root directory and add the following variables:
 ```
+
 DATABASE_DRIVER=ODBC Driver 18 for SQL Server
 DATABASE_SERVER=your_db_server
 DATABASE_NAME=your_db_name
@@ -60,8 +61,9 @@ DATABASE_PASSWORD=your_db_password
 DIALOGFLOW_CX_CREDENTIALS_JSON=your_dialogflow_credentials_json
 DIALOGFLOW_CX_AGENTID=your_dialogflow_agent_id
 DIALOGFLOW_CX_LOCATION=your_dialogflow_location
+WHATSAPP_CHATBOT_PHONE_NUMBER=your_whatsapp_business_api_phone_number
 WHATSAPP_TOKEN=your_whatsapp_token
-VERIFY_TOKEN=your_verify_token
+WHATSAPP_VERIFY_TOKEN=your_whatsapp_verify_token
 STRIPE_SECRET_KEY=your_stripe_secret_key
 WEBSITE_URL=your_website_url
 CLASSIFICATION_MODEL_API_URL=your_classification_model_api_url
@@ -93,8 +95,12 @@ CREATE TABLE addresses (
     city NVARCHAR(255) NOT NULL,
     state NVARCHAR(255) NOT NULL,
     zip_code NVARCHAR(10) NOT NULL,
-    country NVARCHAR(255) NOT NULL DEFAULT 'USA'
+    country NVARCHAR(255) NOT NULL DEFAULT 'USA',
+    address_index VARCHAR(255) NOT NULL,
+    user_id INT NOT NULL FOREIGN KEY REFERENCES users(id)
 );
+
+CREATE INDEX idx_address_index ON addresses(address_index);
 
 CREATE TABLE jobs (
     id INT IDENTITY(1,1) PRIMARY KEY,
@@ -153,7 +159,7 @@ Open your web browser and go to http://localhost:8000.
 
 5. Enter your server URL followed by /webhook (e.g., https://yourdomain.com/webhook).
 
-6. Enter your VERIFY_TOKEN in the "Verify Token" field.
+6. Enter your WHATSAPP_VERIFY_TOKEN in the "Verify Token" field.
 
 7. Save the changes.
 

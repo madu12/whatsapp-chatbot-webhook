@@ -445,10 +445,15 @@ class DialogflowController:
             checkout_session_data = {
                 'job_id': job_id_padded,
                 'transaction_amount': amount,
+                'job_category':job_category.capitalize(),
+                'job_date':job_date_str,
+                'job_time':job_time_str,
                 'job_description': job_description,
                 'posting_fee': posting_fee,
                 'total_amount': (amount + posting_fee),
                 'stripe_customer_id': stripe_customer.id,
+                'recipient_number':recipient_number,
+                'user_id':user.id
             }
             checkout_session = self.stripe_client.create_checkout_session(checkout_session_data)
             if not checkout_session:
@@ -459,7 +464,10 @@ class DialogflowController:
                 'payment_id': checkout_session.id,
                 'payment_intent': checkout_session.payment_intent,
             }
-            JobRepository.update_job(job.id, update_job_data)
+
+            where_criteria = {"id": job.id}
+
+            JobRepository.update_job(where_criteria, update_job_data)
 
             # Create a response message
             response_message = (
@@ -472,7 +480,8 @@ class DialogflowController:
                 f"  🔹 *Amount:* {amount_str}\n"
                 f"  🔹 *Posting Fee:* ${posting_fee:.2f}\n"
                 f"  🔹 *Description*: {job_description}\n\n"
-                f"Please proceed with the escrow payment to complete the posting.\n"
+                f"Please proceed with the escrow payment to complete the posting.\n\n"
+                f"*Note:* The address entered in Stripe will be used as the job location address.\n"
             )
 
             # Create payload response with a button for payment

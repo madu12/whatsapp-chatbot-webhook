@@ -1,5 +1,5 @@
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String, DateTime, Numeric, NVARCHAR, ForeignKey, Index, UniqueConstraint
+from sqlalchemy import Column, Integer, String, DateTime, Numeric, NVARCHAR, ForeignKey, Index, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.mssql import UNIQUEIDENTIFIER
 import uuid
@@ -18,7 +18,8 @@ class User(Base):
     jobs_posted = relationship('Job', foreign_keys='Job.posted_by', back_populates='poster')
     jobs_accepted = relationship('Job', foreign_keys='Job.accepted_by', back_populates='accepter')
     chat_sessions = relationship('ChatSession', back_populates='user')
-
+    
+    addresses = relationship('Address', back_populates='user')
 class Category(Base):
     __tablename__ = 'categories'
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -38,8 +39,11 @@ class Address(Base):
     state = Column(NVARCHAR(255), nullable=False)
     zip_code = Column(NVARCHAR(10), nullable=False)
     country = Column(NVARCHAR(255), nullable=False, default="USA")
+    address_index = Column(NVARCHAR(255), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
 
     jobs = relationship('Job', back_populates='address')
+    user = relationship('User', back_populates='addresses')
 
 class Job(Base):
     __tablename__ = 'jobs'

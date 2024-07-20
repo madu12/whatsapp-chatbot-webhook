@@ -1,5 +1,5 @@
 import requests
-from config import WHATSAPP_TOKEN, LANGUAGE
+from config import WHATSAPP_TOKEN, LANGUAGE, WHATSAPP_CHATBOT_PHONE_NUMBER
 
 class WhatsAppClient:
     def __init__(self):
@@ -8,13 +8,13 @@ class WhatsAppClient:
         """
         self.whatsapp_token = WHATSAPP_TOKEN
         self.language = LANGUAGE
+        self.whatsapp_chatbot_phone_number = WHATSAPP_CHATBOT_PHONE_NUMBER
 
-    def send_whatsapp_message(self, phone_number_id, from_number, message, message_type='text'):
+    def send_whatsapp_message(self, from_number, message, message_type='text'):
         """
         Send a message through WhatsApp API.
 
         Args:
-            phone_number_id (str): The phone number ID of the chatbot.
             from_number (str): The phone number of the recipient.
             message (str): The message to send.
             message_type (str): The type of message ('text' or 'interactive').
@@ -27,7 +27,7 @@ class WhatsAppClient:
                 "Authorization": f"Bearer {self.whatsapp_token}",
                 "Content-Type": "application/json",
             }
-            url = f"https://graph.facebook.com/v19.0/{phone_number_id}/messages"
+            url = f"https://graph.facebook.com/v19.0/{self.whatsapp_chatbot_phone_number}/messages"
             data = {
                 "messaging_product": "whatsapp",
                 "recipient_type": "individual",
