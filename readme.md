@@ -26,55 +26,51 @@ Send a message with the text "Hi" to our contact. This initial message will auto
 
 ## Installation and Setup
 
-1. Clone the repository:
-    ```bash
-    git clone https://github.com/yourusername/whatsapp-chatbot.git
-    cd whatsapp-chatbot
-    ```
+### Prerequisites
 
-2. Create and activate a virtual environment:
-    ```bash
-    python -m venv venv
-    source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
-    ```
+- Python 3.8+
+- Virtual environment (recommended)
 
-3. Install the required dependencies:
-    ```bash
-    pip install -r requirements.txt
-    ```
+### Clone the Repository
 
-4. Set up environment variables:
-    Create a `.env` file in the root directory and add the following variables:
-    ```
-    DATABASE_USERNAME=your_db_username
-    DATABASE_PASSWORD=your_db_password
-    DATABASE_SERVER=your_db_server
-    DATABASE_NAME=your_db_name
-    DATABASE_DRIVER=your_db_driver
-    DIALOGFLOW_CX_CREDENTIALS_JSON=your_dialogflow_credentials_json
-    DIALOGFLOW_CX_AGENTID=your_dialogflow_agent_id
-    DIALOGFLOW_CX_LOCATION=your_dialogflow_location
-    WHATSAPP_TOKEN=your_whatsapp_token
-    VERIFY_TOKEN=your_verify_token
-    STRIPE_SECRET_KEY=your_stripe_secret_key
-    WEBSITE_URL=your_website_url
-    CLASSIFICATION_MODEL_API_URL=your_classification_model_api_url
-    CLASSIFICATION_MODEL_API_KEY=your_classification_model_api_key
-    GOOGLE_MAPS_API_KEY=your_google_maps_api_key
-    ```
+```bash
+git clone https://github.com/yourusername/whatsapp-chatbot.git
+cd whatsapp-chatbot
+```
 
-5. Run the application:
-    ```bash
-    python app.py
-    ```
+### Create and Activate a Virtual Environment
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
+```
 
-6. Access the application:
-    Open your web browser and go to `http://localhost:8000`.
+### Install the Required Dependencies
+```bash
+pip install -r requirements.txt
+```
 
-## Database Setup
+### Set Up Environment Variables
+Create a .env file in the root directory and add the following variables:
+```
+DATABASE_DRIVER=ODBC Driver 18 for SQL Server
+DATABASE_SERVER=your_db_server
+DATABASE_NAME=your_db_name
+DATABASE_USERNAME=your_db_username
+DATABASE_PASSWORD=your_db_password
+DIALOGFLOW_CX_CREDENTIALS_JSON=your_dialogflow_credentials_json
+DIALOGFLOW_CX_AGENTID=your_dialogflow_agent_id
+DIALOGFLOW_CX_LOCATION=your_dialogflow_location
+WHATSAPP_TOKEN=your_whatsapp_token
+VERIFY_TOKEN=your_verify_token
+STRIPE_SECRET_KEY=your_stripe_secret_key
+WEBSITE_URL=your_website_url
+CLASSIFICATION_MODEL_API_URL=your_classification_model_api_url
+CLASSIFICATION_MODEL_API_KEY=your_classification_model_api_key
+GOOGLE_MAPS_API_KEY=your_google_maps_api_key
+```
 
-### Table Creation SQL Scripts
-
+### Database Setup
+Ensure your database is set up and running. Use the following SQL queries to create the necessary tables:
 ```sql
 CREATE TABLE users (
     id INT IDENTITY(1,1) PRIMARY KEY,
@@ -133,3 +129,65 @@ CREATE TABLE chat_sessions (
 );
 
 CREATE INDEX idx_chat_session_id ON chat_sessions(id);
+```
+
+### Run the Application
+```bash
+python app.py
+```
+
+### Access the Application
+Open your web browser and go to http://localhost:8000.
+
+## Webhook Setup
+
+### WhatsApp Webhook
+
+1. Go to the [Facebook Developers](https://developers.facebook.com/) portal.
+
+2. Select your App.
+
+3. Go to the "WhatsApp" product and then "Configuration".
+
+4. Under "Webhook", click "Edit".
+
+5. Enter your server URL followed by /webhook (e.g., https://yourdomain.com/webhook).
+
+6. Enter your VERIFY_TOKEN in the "Verify Token" field.
+
+7. Save the changes.
+
+### Dialogflow Webhook
+
+1. Go to the [Dialogflow CX Console](https://dialogflow.cloud.google.com/cx).
+
+2. Choose your Google Cloud project.
+
+3. Select your agent.
+
+4. Select the Manage tab.
+
+5. Click Webhooks.
+
+6. Click Create or click a webhook resource in the list to edit.
+
+7. Enter your server URL followed by /dialogflow_webhook (e.g., https://yourdomain.com/dialogflow_webhook).
+
+8. Click Save.
+
+## Additional Resources
+
+* [Dialogflow Documentation](https://cloud.google.com/dialogflow/cx/docs)
+
+* [WhatsApp Business API Documentation](https://developers.facebook.com/docs/whatsapp)
+
+* [Stripe API Documentation](https://stripe.com/docs/api)
+
+## Troubleshooting
+
+### Common Issues
+1. Environment Variables: Ensure all required environment variables are set in the .env file.
+
+2. Database Connection: Verify your database connection string and credentials.
+
+3. Webhook Configuration: Ensure the webhook URL and verify token are correctly configured in the Facebook Developers portal.
