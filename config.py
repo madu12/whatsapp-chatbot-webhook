@@ -27,6 +27,10 @@ WEBSITE_URL = os.getenv("WEBSITE_URL")
 # Load Google Map credentials
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
 
+# Load Classification Model credentials
+CLASSIFICATION_MODEL_API_URL = os.getenv("CLASSIFICATION_MODEL_API_URL")
+CLASSIFICATION_MODEL_API_KEY = os.getenv("CLASSIFICATION_MODEL_API_KEY")
+
 # Ensure critical environment variables are loaded
 required_vars = [
     DIALOGFLOW_CX_CREDENTIALS,
@@ -36,7 +40,9 @@ required_vars = [
     VERIFY_TOKEN,
     STRIPE_SECRET_KEY,
     WEBSITE_URL,
-    GOOGLE_MAPS_API_KEY
+    GOOGLE_MAPS_API_KEY,
+    CLASSIFICATION_MODEL_API_URL,
+    CLASSIFICATION_MODEL_API_KEY
 ]
 
 missing_vars = [var for var, value in zip([
@@ -47,7 +53,9 @@ missing_vars = [var for var, value in zip([
     "VERIFY_TOKEN",
     "STRIPE_SECRET_KEY",
     "WEBSITE_URL",
-    "GOOGLE_MAPS_API_KEY"
+    "GOOGLE_MAPS_API_KEY",
+    "CLASSIFICATION_MODEL_API_URL",
+    "CLASSIFICATION_MODEL_API_KEY"
 ], required_vars) if not value]
 
 if missing_vars:

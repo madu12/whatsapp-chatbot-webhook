@@ -3,7 +3,8 @@ import datetime
 from database.repositories import ChatSessionRepository, JobRepository, CategoryRepository, UserRepository
 from clients.stripe_client import StripeClient
 import requests
-from config import GOOGLE_MAPS_API_KEY
+from config import GOOGLE_MAPS_API_KEY, CLASSIFICATION_MODEL_API_URL, CLASSIFICATION_MODEL_API_KEY
+
 
 class DialogflowController:
     def __init__(self):
@@ -502,7 +503,7 @@ class DialogflowController:
 
     def get_job_category(self, text):
         """
-        Get the job category from the text.
+        Get the job category from the text using an Classification model API.
 
         Args:
             text (str): The text to extract the category from.
@@ -510,7 +511,27 @@ class DialogflowController:
         Returns:
             str: The extracted job category.
         """
-        return 'pet care'
+
+        return 'pet care' #testing
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {CLASSIFICATION_MODEL_API_KEY}'
+        }
+        payload = {
+            'text': text
+        }
+
+        try:
+            response = requests.post(CLASSIFICATION_MODEL_API_URL, json=payload, headers=headers)
+            response.raise_for_status()
+            category = response.json().get('category')
+            if category:
+                return category
+            else:
+                return None
+        except requests.exceptions.RequestException as e:
+            print(f"Error calling ML model API: {e}")
+            return None
 
     def is_valid_zip_code(self, zip_code):
         """
