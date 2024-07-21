@@ -4,7 +4,7 @@ from database.repositories import ChatSessionRepository, JobRepository, Category
 from clients.stripe_client import StripeClient
 import requests
 from config import GOOGLE_MAPS_API_KEY, CLASSIFICATION_MODEL_API_URL, CLASSIFICATION_MODEL_API_KEY
-
+from asgiref.sync import sync_to_async
 
 class DialogflowController:
     def __init__(self):
@@ -15,7 +15,7 @@ class DialogflowController:
         self.stripe_client = StripeClient()
         self.api_key = GOOGLE_MAPS_API_KEY
 
-    def handle_message(self, sender_message, recipient_number, chat_session_id=None):
+    async def handle_message(self, sender_message, recipient_number, chat_session_id=None):
         """
         Handle the incoming message by detecting the intent using Dialogflow.
 
@@ -27,13 +27,13 @@ class DialogflowController:
         Returns:
             dict: The processed response from Dialogflow.
         """
-        response = self.dialogflow_client.detect_intent(sender_message, recipient_number, chat_session_id)
+        response = await self.dialogflow_client.detect_intent(sender_message, recipient_number, chat_session_id)
         if response:
-            return self.process_dialogflow_response(response.response_messages)
+            return await self.process_dialogflow_response(response.response_messages)
         else:
             return {"error": "Failed to detect intent"}
 
-    def process_dialogflow_response(self, fulfillment_messages):
+    async def process_dialogflow_response(self, fulfillment_messages):
         """
         Process the response messages from Dialogflow.
 
@@ -52,7 +52,7 @@ class DialogflowController:
             text_message = [message for message in fulfillment_messages if 'text' in message.text]
 
             if payload_messages:
-                buttons, payload_text = self.process_payload_messages(payload_messages)
+                buttons, payload_text = await self.process_payload_messages(payload_messages)
 
                 if not text_message:
                     payload_text_message = payload_text
@@ -60,7 +60,7 @@ class DialogflowController:
                     payload_text_message = text_message[0].text.text[0]
 
                 if buttons:
-                    reply_btn_message = self.create_button_message(payload_text_message, buttons)
+                    reply_btn_message = await self.create_button_message(payload_text_message, buttons)
 
             if not reply_btn_message and text_message:
                 simple_text_message = text_message[0].text.text[0] if text_message else None
@@ -73,7 +73,7 @@ class DialogflowController:
             print(f"Error processing Dialogflow response: {e}")
             raise e
 
-    def process_payload_messages(self, payload_messages):
+    async def process_payload_messages(self, payload_messages):
         """
         Process payload messages to extract buttons and text.
 
@@ -116,7 +116,7 @@ class DialogflowController:
 
         return buttons, payload_text
 
-    def create_button_message(self, text, buttons):
+    async def create_button_message(self, text, buttons):
         """
         Create a button message for WhatsApp interactive messages.
 
@@ -150,7 +150,7 @@ class DialogflowController:
             }
         }
 
-    def webhook_response(self, text_response, payload_response, parameters):
+    async def webhook_response(self, text_response, payload_response, parameters):
         """
         Generate a webhook response for Dialogflow.
 
@@ -188,7 +188,7 @@ class DialogflowController:
 
         return response
 
-    def handle_dialogflow_webhook(self, body):
+    async def handle_dialogflow_webhook(self, body):
         """
         Handle the webhook request from Dialogflow.
 
@@ -220,20 +220,20 @@ class DialogflowController:
                 tag = fulfillment_info["tag"]
 
                 if tag == 'validateCollectedPostJobData' or tag == 'validateCollectedFindJobData':
-                    return self.process_post_job_data(parameters, text)
+                    return await self.process_post_job_data(parameters, text)
 
                 if tag == 'postJobDataConfirmation':
-                    return self.post_job_data_confirmation(parameters)
+                    return await self.post_job_data_confirmation(parameters)
 
                 if tag == 'postJobDataSave':
-                    return self.post_job_data_save(parameters, recipient_number, chat_session_id)
+                    return await self.post_job_data_save(parameters, recipient_number, chat_session_id)
 
             return {"status": "error", "message": "No valid tag found in fulfillment info."}
         except Exception as e:
             print(f"Error processing Dialogflow webhook: {e}")
             return {"status": "error", "message": str(e)}
 
-    def process_post_job_data(self, parameters, text=None):
+    async def process_post_job_data(self, parameters, text=None):
         """
         Process the collected post job data.
 
@@ -256,7 +256,7 @@ class DialogflowController:
                 json_parameters["job_description"] = text
 
             if not parameters.get('job_category') and text:
-                get_job_category = self.get_job_category(text)
+                get_job_category = await self.get_job_category(text)
                 if get_job_category:
                     json_parameters["job_category"] = get_job_category
 
@@ -282,7 +282,7 @@ class DialogflowController:
 
             if parameters.get('zip_code'):
                 zip_code = parameters.get('zip_code')
-                valid_zip_code, zip_code_data = self.is_valid_zip_code(zip_code)
+                valid_zip_code, zip_code_data = await self.is_valid_zip_code(zip_code)
                 if not valid_zip_code:
                     json_parameters["zip_code"] = None
                 else:
@@ -291,15 +291,15 @@ class DialogflowController:
             if parameters.get('amount'):
                 if float(parameters['amount']['amount']) < 10:
                     json_parameters["amount"] = None
-                    return self.webhook_response("Minimum price is $10 for this job.", None, json_parameters)
+                    return await self.webhook_response("Minimum price is $10 for this job.", None, json_parameters)
 
-            return self.webhook_response(None, None, json_parameters)
+            return await self.webhook_response(None, None, json_parameters)
 
         except Exception as e:
             print(f"Error processing job data: {e}")
             return {"message": "Error processing job data.", "status": 500}
 
-    def post_job_data_confirmation(self, parameters):
+    async def post_job_data_confirmation(self, parameters):
         """
         Confirm the details of the job posting.
 
@@ -357,13 +357,13 @@ class DialogflowController:
                     }
                 ]
             }
-            return self.webhook_response(None, payloadResponse, None)
+            return await self.webhook_response(None, payloadResponse, None)
 
         except Exception as e:
             print(f"Error confirming job data: {e}")
             return {"error": "Failed to confirm job data"}
 
-    def post_job_data_save(self, parameters, recipient_number, chat_session_id):
+    async def post_job_data_save(self, parameters, recipient_number, chat_session_id):
         """
         Save the job data to the database and create a Stripe checkout session.
 
@@ -406,17 +406,17 @@ class DialogflowController:
             )
 
             # Get or create job category
-            category = CategoryRepository.get_category_by_name(job_category)
+            category = await CategoryRepository.get_category_by_name(job_category)
             if not category:
                 return {"error": f"Category '{job_category}' not found"}
 
             # Get user by phone number
-            user = UserRepository.get_user_by_phone_number(recipient_number)
+            user = await UserRepository.get_user_by_phone_number(recipient_number)
             if not user:
                 return {"error": "User not found"}
 
             # Create job entry in the database
-            job = JobRepository.create_job(
+            job = await JobRepository.create_job(
                 job_description=job_description,
                 category_id=category.id,
                 date_time=job_datetime,
@@ -427,7 +427,7 @@ class DialogflowController:
             )
 
             # Update chat session with job ID
-            ChatSessionRepository.update_chat_session_job_id(chat_session_id, job.id)
+            await ChatSessionRepository.update_chat_session_job_id(chat_session_id, job.id)
 
             # Format job ID
             job_id_padded = str(job.id).zfill(5)
@@ -437,7 +437,7 @@ class DialogflowController:
                 "name": user.name,
                 "phone_number": user.phone_number
             }
-            stripe_customer = self.stripe_client.create_or_retrieve_customer(customer_data)
+            stripe_customer = await self.stripe_client.create_or_retrieve_customer(customer_data)
             if not stripe_customer:
                 raise Exception('Failed to create or retrieve customer stripe.')
 
@@ -455,7 +455,7 @@ class DialogflowController:
                 'recipient_number':recipient_number,
                 'user_id':user.id
             }
-            checkout_session = self.stripe_client.create_checkout_session(checkout_session_data)
+            checkout_session = await self.stripe_client.create_checkout_session(checkout_session_data)
             if not checkout_session:
                 raise Exception('Failed to create checkout sessions stripe.')
 
@@ -467,7 +467,7 @@ class DialogflowController:
 
             where_criteria = {"id": job.id}
 
-            JobRepository.update_job(where_criteria, update_job_data)
+            await JobRepository.update_job(where_criteria, update_job_data)
 
             # Create a response message
             response_message = (
@@ -504,13 +504,13 @@ class DialogflowController:
                 ]
             }
 
-            return self.webhook_response(None, payload_response, None)
+            return await self.webhook_response(None, payload_response, None)
 
         except Exception as e:
             print(f"Error saving job data: {e}")
             return {"error": "Failed to save job data"}
 
-    def get_job_category(self, text):
+    async def get_job_category(self, text):
         """
         Get the job category from the text using an Classification model API.
 
@@ -542,7 +542,7 @@ class DialogflowController:
             print(f"Error calling ML model API: {e}")
             return None
 
-    def is_valid_zip_code(self, zip_code):
+    async def is_valid_zip_code(self, zip_code):
         """
         Validate the zip code using Google Maps API and return the corresponding city and state.
 
@@ -555,7 +555,7 @@ class DialogflowController:
         try:
             
             url = f"https://maps.googleapis.com/maps/api/geocode/json?address={zip_code}&key={self.api_key}&sensor=true"
-            response = requests.get(url)
+            response = await sync_to_async(requests.get)(url)
             response.raise_for_status()
             data = response.json()
 

@@ -9,7 +9,7 @@ from utils.general_utils import GeneralUtils
 
 class UserRepository:
     @staticmethod
-    def get_user_by_phone_number(phone_number: str):
+    async def get_user_by_phone_number(phone_number: str):
         """
         Retrieve a user by their phone number.
         
@@ -27,7 +27,7 @@ class UserRepository:
             return None
 
     @staticmethod
-    def create_user(name: str, phone_number: str):
+    async def create_user(name: str, phone_number: str):
         """
         Create a new user with the given name and phone number.
         
@@ -53,7 +53,7 @@ class UserRepository:
 
 class ChatSessionRepository:
     @staticmethod
-    def create_chat_session(chat_session_id, job_type, user_id):
+    async def create_chat_session(chat_session_id, job_type, user_id):
         """
         Create a new chat session.
         
@@ -77,7 +77,7 @@ class ChatSessionRepository:
             return None
 
     @staticmethod
-    def get_latest_chat_session_by_user(user_id):
+    async def get_latest_chat_session_by_user(user_id):
         """
         Retrieve the latest chat session for a user.
         
@@ -95,7 +95,7 @@ class ChatSessionRepository:
             return None
 
     @staticmethod
-    def update_chat_session_job_id(chat_session_id: str, job_id: int):
+    async def update_chat_session_job_id(chat_session_id: str, job_id: int):
         """
         Update the job ID associated with a chat session.
         
@@ -122,7 +122,7 @@ class ChatSessionRepository:
 
 class CategoryRepository:
     @staticmethod
-    def get_category_by_name(category_name):
+    async def get_category_by_name(category_name):
         """
         Retrieve a category by its name.
         
@@ -142,7 +142,7 @@ class CategoryRepository:
 
 class JobRepository:
     @staticmethod
-    def create_job(job_description, category_id, date_time, amount, posting_fee, zip_code, posted_by):
+    async def create_job(job_description, category_id, date_time, amount, posting_fee, zip_code, posted_by):
         """
         Create a new job posting.
         
@@ -179,7 +179,7 @@ class JobRepository:
             return None
 
     @staticmethod
-    def get_job_by_id(job_id):
+    async def get_job_by_id(job_id):
         """
         Retrieve a job by its ID.
         
@@ -197,7 +197,7 @@ class JobRepository:
             return None
     
     @staticmethod
-    def get_job_by_payment_id(payment_id):
+    async def get_job_by_payment_id(payment_id):
         """
         Retrieve a job by its Payment ID.
         
@@ -215,7 +215,7 @@ class JobRepository:
             return None
 
     @staticmethod
-    def update_job(where, update_data):
+    async def update_job(where, update_data):
         """
         Update a job based on custom criteria.
         
@@ -252,7 +252,7 @@ class JobRepository:
 
 class AddressRepository:
     @staticmethod
-    def register_address(address_data, user_id):
+    async def register_address(address_data, user_id):
         """
         Register an address for a user.
         

@@ -22,7 +22,7 @@ class DialogflowClient:
         # Create a Dialogflow SessionsClient
         self.client = dialogflow.SessionsClient(credentials=credentials, client_options=client_options)
 
-    def detect_intent(self, sender_message, recipient_number, chat_session_id=None):
+    async def detect_intent(self, sender_message, recipient_number, chat_session_id=None):
         """
         Detect the intent of a message using Dialogflow.
 

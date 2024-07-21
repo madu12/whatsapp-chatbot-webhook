@@ -2,6 +2,7 @@ import uuid
 from clients.whatsapp_client import WhatsAppClient
 from controllers.dialogflow_controller import DialogflowController
 from database.repositories import UserRepository, ChatSessionRepository
+
 class WhatsAppController:
     def __init__(self):
         """
@@ -12,7 +13,7 @@ class WhatsAppController:
         self.sessions = {}
         self.processed_message_ids = set()
 
-    def process_text_message(self, recipient_number, recipient_message):
+    async def process_text_message(self, recipient_number, recipient_message):
         """
         Process the text message received from the user.
 
@@ -24,20 +25,24 @@ class WhatsAppController:
             post_job_phrases = ["post job", "post a job", "post new job", "post another job"]
             find_job_phrases = ["find job", "find a job", "find new job", "find another job"]
 
-            user = UserRepository.get_user_by_phone_number(recipient_number)
+            user = await UserRepository.get_user_by_phone_number(recipient_number)
+            if not user:
+                await self.register_new_user(recipient_number, "User")
+                return
+
             if recipient_message.lower() == "help":
-                self.send_help_message( recipient_number)
+                await self.send_help_message(recipient_number)
                 return
 
             if any(phrase in recipient_message.lower() for phrase in post_job_phrases + find_job_phrases):
-                self.handle_job_action(recipient_number, recipient_message, user, post_job_phrases, find_job_phrases)
+                await self.handle_job_action(recipient_number, recipient_message, user, post_job_phrases, find_job_phrases)
             else:
-                self.handle_continued_conversation(recipient_number, recipient_message, user)
+                await self.handle_continued_conversation(recipient_number, recipient_message, user)
         except Exception as e:
             print(f"Error processing text message: {e}")
-            self.send_error_message(recipient_number)
+            await self.send_error_message(recipient_number)
 
-    def handle_job_action(self, recipient_number, recipient_message, user, post_job_phrases, find_job_phrases):
+    async def handle_job_action(self, recipient_number, recipient_message, user, post_job_phrases, find_job_phrases):
         """
         Handle the job-related actions (post job or find job).
 
@@ -54,18 +59,21 @@ class WhatsAppController:
 
             if any(phrase in recipient_message.lower() for phrase in post_job_phrases):
                 recipient_message = "Post Job"
-                ChatSessionRepository.create_chat_session(chat_session_id, recipient_message, user.id)
+                await ChatSessionRepository.create_chat_session(chat_session_id, recipient_message, user.id)
             elif any(phrase in recipient_message.lower() for phrase in find_job_phrases):
                 recipient_message = "Find Job"
-                ChatSessionRepository.create_chat_session(chat_session_id, recipient_message, user.id)
+                await ChatSessionRepository.create_chat_session(chat_session_id, recipient_message, user.id)
 
-            dialogflow_response = self.dialogflow_controller.handle_message(recipient_message, recipient_number, chat_session_id)
-            self.whatsapp_client.send_whatsapp_message( recipient_number, dialogflow_response['simpleTextMessage'], 'text')
+            dialogflow_response = await self.dialogflow_controller.handle_message(recipient_message, recipient_number, chat_session_id)
+            if dialogflow_response:
+                await self.whatsapp_client.send_whatsapp_message(recipient_number, dialogflow_response['simpleTextMessage'], 'text')
+            else:
+                await self.send_default_options(recipient_number)
         except Exception as e:
             print(f"Error handling job action: {e}")
-            self.send_error_message(recipient_number)
+            await self.send_error_message(recipient_number)
 
-    def handle_continued_conversation(self, recipient_number, recipient_message, user):
+    async def handle_continued_conversation(self, recipient_number, recipient_message, user):
         """
         Handle the continued conversation when the user sends a non-job-related message.
 
@@ -77,17 +85,21 @@ class WhatsAppController:
         try:
             chat_session_id = self.sessions.get(recipient_number)
             if not chat_session_id:
-                chat_session = ChatSessionRepository.get_latest_chat_session_by_user(user.id)
+                chat_session = await ChatSessionRepository.get_latest_chat_session_by_user(user.id)
                 if chat_session:
                     chat_session_id = str(chat_session.id)
                     self.sessions[recipient_number] = chat_session_id
-            dialogflow_response = self.dialogflow_controller.handle_message(recipient_message, recipient_number, chat_session_id)
-            self.process_dialogflow_response( recipient_number, dialogflow_response)
+
+            dialogflow_response = await self.dialogflow_controller.handle_message(recipient_message, recipient_number, chat_session_id)
+            if dialogflow_response:
+                await self.process_dialogflow_response(recipient_number, dialogflow_response)
+            else:
+                await self.send_default_options(recipient_number)
         except Exception as e:
             print(f"Error handling continued conversation: {e}")
-            self.send_error_message(recipient_number)
+            await self.send_error_message(recipient_number)
 
-    def process_dialogflow_response(self, recipient_number, dialogflow_response):
+    async def process_dialogflow_response(self, recipient_number, dialogflow_response):
         """
         Process the response from Dialogflow and send the appropriate message to the user.
 
@@ -98,19 +110,19 @@ class WhatsAppController:
         try:
             if "error" in dialogflow_response:
                 response_message = "Something went wrong please try again"
-                self.whatsapp_client.send_whatsapp_message( recipient_number, response_message)
+                await self.whatsapp_client.send_whatsapp_message(recipient_number, response_message)
             else:
                 if 'replyBtnMessage' in dialogflow_response and dialogflow_response['replyBtnMessage'] is not None:
-                    self.whatsapp_client.send_whatsapp_message( recipient_number, dialogflow_response['replyBtnMessage'], 'interactive')
+                    await self.whatsapp_client.send_whatsapp_message(recipient_number, dialogflow_response['replyBtnMessage'], 'interactive')
                 elif 'simpleTextMessage' in dialogflow_response and dialogflow_response['simpleTextMessage'] is not None:
-                    self.whatsapp_client.send_whatsapp_message( recipient_number, dialogflow_response['simpleTextMessage'], 'text')
+                    await self.whatsapp_client.send_whatsapp_message(recipient_number, dialogflow_response['simpleTextMessage'], 'text')
                 else:
-                    self.send_default_options( recipient_number)
+                    await self.send_default_options(recipient_number)
         except Exception as e:
             print(f"Error processing Dialogflow response: {e}")
-            self.send_error_message(recipient_number)
+            await self.send_error_message(recipient_number)
 
-    def send_default_options(self, recipient_number):
+    async def send_default_options(self, recipient_number):
         """
         Send the default options (Post Job or Find Job) to the user.
 
@@ -141,13 +153,13 @@ class WhatsAppController:
                 f'2️⃣ Find Job: Type "Find Job" to search for available jobs.\n\n'
                 f"If you need any assistance, just type 'help'. 💬"
             )
-            interactive_message = self.dialogflow_controller.create_button_message(response_message, buttons)
-            self.whatsapp_client.send_whatsapp_message( recipient_number, interactive_message, 'interactive')
+            interactive_message = await self.dialogflow_controller.create_button_message(response_message, buttons)
+            await self.whatsapp_client.send_whatsapp_message(recipient_number, interactive_message, 'interactive')
         except Exception as e:
             print(f"Error sending default options: {e}")
-            self.send_error_message(recipient_number)
+            await self.send_error_message(recipient_number)
 
-    def handle_whatsapp_message(self, body):
+    async def handle_whatsapp_message(self, body):
         """
         Handle the incoming message from WhatsApp.
 
@@ -164,9 +176,9 @@ class WhatsAppController:
             recipient_name = value["contacts"][0]["profile"]['name']
             message_id = message["id"]
 
-            user = UserRepository.get_user_by_phone_number(recipient_number)
+            user = await UserRepository.get_user_by_phone_number(recipient_number)
             if not user:
-                self.register_new_user(recipient_number, recipient_name)
+                await self.register_new_user(recipient_number, recipient_name)
                 return {"status": "ok"}
 
             if message_id in self.processed_message_ids:
@@ -176,20 +188,20 @@ class WhatsAppController:
 
             if message["type"] == "text":
                 recipient_message = message["text"]["body"]
-                self.process_text_message(recipient_number, recipient_message)
+                await self.process_text_message(recipient_number, recipient_message)
             elif message["type"] == "interactive":
                 interactive_message = message["interactive"]["button_reply"]["id"]
-                self.process_text_message(recipient_number, interactive_message)
+                await self.process_text_message(recipient_number, interactive_message)
             else:
                 response_message = 'This chatbot only supports text and interactive messages.'
-                self.whatsapp_client.send_whatsapp_message( recipient_number, response_message)
+                await self.whatsapp_client.send_whatsapp_message(recipient_number, response_message)
 
             return {"status": "ok"}
         except Exception as e:
             print(f"Error handling WhatsApp message: {e}")
             return {"status": "error", "message": str(e)}
 
-    def register_new_user(self, recipient_number, recipient_name):
+    async def register_new_user(self, recipient_number, recipient_name):
         """
         Register a new user and send a welcome message.
 
@@ -198,7 +210,7 @@ class WhatsAppController:
             recipient_name (str): The name of the recipient.
         """
         try:
-            user = UserRepository.create_user(recipient_name, recipient_number)
+            user = await UserRepository.create_user(recipient_name, recipient_number)
             if user:
                 buttons = [
                     {
@@ -224,13 +236,13 @@ class WhatsAppController:
                     f"2️⃣ Find Job\n\n"
                     f"If you need any assistance, just type 'help'. 💬"
                 )
-                interactive_message = self.dialogflow_controller.create_button_message(response_message, buttons)
-                self.whatsapp_client.send_whatsapp_message( recipient_number, interactive_message, 'interactive')
+                interactive_message = await self.dialogflow_controller.create_button_message(response_message, buttons)
+                await self.whatsapp_client.send_whatsapp_message(recipient_number, interactive_message, 'interactive')
         except Exception as e:
             print(f"Error registering new user: {e}")
-            self.send_error_message(recipient_number)
+            await self.send_error_message(recipient_number)
 
-    def send_help_message(self, recipient_number):
+    async def send_help_message(self, recipient_number):
         """
         Send a help message to the user.
 
@@ -245,12 +257,12 @@ class WhatsAppController:
                 "   🔹 *Check Status:* Type 'Check Status' to view the status of your jobs.\n\n"
                 "   🔹 *My Jobs:* Type 'My Jobs' to see a list of jobs you have posted or accepted.\n\n"
             )
-            self.whatsapp_client.send_whatsapp_message( recipient_number, help_message, 'text')
+            await self.whatsapp_client.send_whatsapp_message(recipient_number, help_message, 'text')
         except Exception as e:
             print(f"Error sending help message: {e}")
-            self.send_error_message(recipient_number)
+            await self.send_error_message(recipient_number)
 
-    def send_error_message(self, recipient_number):
+    async def send_error_message(self, recipient_number):
         """
         Send an error message to the user.
 
@@ -259,11 +271,11 @@ class WhatsAppController:
         """
         try:
             response_message = "We encountered an issue processing your request. Please try again later."
-            self.whatsapp_client.send_whatsapp_message( recipient_number, response_message)
+            await self.whatsapp_client.send_whatsapp_message(recipient_number, response_message)
         except Exception as e:
             print(f"Error sending error message: {e}")
 
-    def notify_payment_success(self,session, customer_address):
+    async def notify_payment_success(self, session, customer_address):
         """
         Notify the user about the successful payment via WhatsApp.
 
@@ -291,7 +303,7 @@ class WhatsAppController:
                 f"Please proceed with the escrow payment to complete the posting.\n\n"
                 f"*Note:* The address entered in Stripe will be used as the job location address.\n"
             )
-            # send the response message via WhatsApp or any other service
-            self.whatsapp_client.send_whatsapp_message( session.metadata.recipient_number, response_message)
+            await self.whatsapp_client.send_whatsapp_message(session.metadata.recipient_number, response_message)
         except Exception as e:
             print(f"Error generating payment success message: {e}")
+

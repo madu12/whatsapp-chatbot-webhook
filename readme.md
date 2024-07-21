@@ -40,8 +40,8 @@ cd whatsapp-chatbot
 
 ### Create and Activate a Virtual Environment
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows, use `.venv\Scripts\activate`
 ```
 
 ### Install the Required Dependencies

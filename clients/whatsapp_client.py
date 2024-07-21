@@ -1,5 +1,6 @@
 import requests
 from config import WHATSAPP_TOKEN, LANGUAGE, WHATSAPP_CHATBOT_PHONE_NUMBER
+from asgiref.sync import sync_to_async
 
 class WhatsAppClient:
     def __init__(self):
@@ -10,7 +11,7 @@ class WhatsAppClient:
         self.language = LANGUAGE
         self.whatsapp_chatbot_phone_number = WHATSAPP_CHATBOT_PHONE_NUMBER
 
-    def send_whatsapp_message(self, from_number, message, message_type='text'):
+    async def send_whatsapp_message(self, from_number, message, message_type='text'):
         """
         Send a message through WhatsApp API.
 
@@ -38,9 +39,9 @@ class WhatsAppClient:
             else:
                 data.update({"type": "text", "text": {"preview_url": False, "body": message}})
 
-            response = requests.post(url, json=data, headers=headers)
-            response.raise_for_status()
+            await sync_to_async(requests.post)(url, json=data, headers=headers)
         except requests.exceptions.HTTPError as http_err:
             print(f"HTTP error occurred: {http_err}")
         except Exception as err:
             print(f"Error occurred: {err}")
+

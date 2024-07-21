@@ -1,11 +1,11 @@
 import os
 import stripe
 from database.repositories import JobRepository, AddressRepository
-from flask import Flask, jsonify, request, render_template, render_template_string, redirect,url_for
+from flask import Flask, jsonify, request, render_template, redirect,url_for
 from controllers.whatsapp_controller import WhatsAppController
 from clients.whatsapp_client import WhatsAppClient
 from controllers.dialogflow_controller import DialogflowController
-from config import WHATSAPP_CHATBOT_PHONE_NUMBER, WHATSAPP_VERIFY_TOKEN,  STRIPE_SECRET_KEY
+from config import WHATSAPP_VERIFY_TOKEN,  STRIPE_SECRET_KEY
 
 app = Flask(__name__, static_folder='assets')
 
@@ -20,14 +20,14 @@ whatsapp_client = WhatsAppClient()
 processed_message_ids = set()
 
 @app.route("/", methods=["GET"])
-def home():
+async def home():
     """
     Home route to load the static HTML page.
     """
     return render_template("index.html")
 
 @app.route("/webhook", methods=["POST", "GET"])
-def webhook():
+async def webhook():
     """
     Webhook endpoint for WhatsApp.
 
@@ -69,7 +69,7 @@ def webhook():
                                 return jsonify({"status": "ok"}), 200
 
                             processed_message_ids.add(message_id)
-                            response = whatsapp_controller.handle_whatsapp_message(body)
+                            response = await whatsapp_controller.handle_whatsapp_message(body)
                             return jsonify(response), 200
                         elif "statuses" in value:
                             # Handle statuses and return status details
@@ -84,7 +84,7 @@ def webhook():
             return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route("/dialogflow_webhook", methods=["POST"])
-def dialogflow_webhook():
+async def dialogflow_webhook():
     """
     Webhook endpoint for Dialogflow.
 
@@ -92,20 +92,20 @@ def dialogflow_webhook():
     """
     body = request.get_json()
     try:
-        response = dialogflow_controller.handle_dialogflow_webhook(body)
+        response = await dialogflow_controller.handle_dialogflow_webhook(body)
         return jsonify(response), 200
     except Exception as e:
         print(f"Error processing Dialogflow webhook: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/success', methods=['GET'])
-def order_success():
+async def order_success():
     payment_id = request.args.get('paymentID')
     if not payment_id:
         return redirect(url_for('home'))
 
     session = stripe.checkout.Session.retrieve(payment_id)
-    customer_address=session.customer_details.address
+    customer_address = session.customer_details.address
 
     if session and customer_address:
         address_data = {
@@ -116,8 +116,7 @@ def order_success():
             "country": customer_address.country
         }
 
-        address_repo = AddressRepository()
-        result = address_repo.register_address(address_data, session.metadata.user_id)
+        result = await AddressRepository.register_address(address_data, session.metadata.user_id)
 
         address_id = result['address_data'].id if result['address_data'] else None
 
@@ -128,9 +127,9 @@ def order_success():
         }
         where_criteria = {"id": int(session.metadata.job_id), "payment_status": 'unpaid'}
 
-        job = JobRepository.update_job(where_criteria, update_job_data)
+        job = await JobRepository.update_job(where_criteria, update_job_data)
         if job:
-            whatsapp_controller.notify_payment_success( session, customer_address)
+            await whatsapp_controller.notify_payment_success( session, customer_address)
 
         return render_template(
             'success.html',

@@ -9,7 +9,7 @@ class StripeClient:
         self.website_url = WEBSITE_URL
         stripe.api_key = STRIPE_SECRET_KEY
 
-    def create_or_retrieve_customer(self, customer_data):
+    async def create_or_retrieve_customer(self, customer_data):
         """
         Create a new Stripe customer or retrieve an existing one based on the provided phone number.
 
@@ -19,7 +19,7 @@ class StripeClient:
         try:
             # Query Stripe for existing customers with the given phone number
             query = f"phone:'{customer_data['phone_number']}'"
-            customers = stripe.Customer.search(query=query, limit=1)
+            customers =  stripe.Customer.search(query=query, limit=1)
             
             if customers['data']:
                 # Return the first customer if found
@@ -36,7 +36,7 @@ class StripeClient:
             print(f"Error stripe create or retrieve customer: {e.user_message}")
             raise e
 
-    def create_checkout_session(self, checkout_session_data):
+    async def create_checkout_session(self, checkout_session_data):
         """
         Create a new Stripe checkout session for job payment.
 
