@@ -5,6 +5,8 @@ from clients.stripe_client import StripeClient
 import requests
 from config import GOOGLE_MAPS_API_KEY, CLASSIFICATION_MODEL_API_URL, CLASSIFICATION_MODEL_API_KEY
 from asgiref.sync import sync_to_async
+import logging
+
 
 class DialogflowController:
     def __init__(self):
@@ -162,31 +164,40 @@ class DialogflowController:
         Returns:
             dict: The structured webhook response.
         """
-        response = {
-            "fulfillment_response": {},
-            "session_info": {}
-        }
+        try:
+            response = {
+                "fulfillment_response": {},
+                "session_info": {}
+            }
 
-        if text_response:
-            response["fulfillment_response"]["messages"] = [
-                {
-                    "text": {
-                        "text": [text_response]
+            if text_response:
+                logging.info(f"Text response: {text_response}")
+                response["fulfillment_response"]["messages"] = [
+                    {
+                        "text": {
+                            "text": [text_response]
+                        }
                     }
-                }
-            ]
+                ]
 
-        if payload_response:
-            response["fulfillment_response"]["messages"] = [
-                {
-                    "payload": payload_response
-                }
-            ]
+            if payload_response:
+                logging.info(f"Payload response: {payload_response}")
+                response["fulfillment_response"]["messages"] = [
+                    {
+                        "payload": payload_response
+                    }
+                ]
 
-        if parameters:
-            response["session_info"]["parameters"] = parameters
+            if parameters:
+                logging.info(f"Parameters: {parameters}")
+                response["session_info"]["parameters"] = parameters
 
-        return response
+            logging.info(f"Final response: {response}")
+            return response
+
+        except Exception as e:
+            logging.error(f"Error in generating webhook response: {e}")
+            raise e
 
     async def handle_dialogflow_webhook(self, body):
         """
@@ -211,7 +222,7 @@ class DialogflowController:
                 return {"status": "error", "message": "Missing session information."}
 
             parameters = session_info.get("parameters")
-            print(parameters)
+            logging.info(f"parameters: {parameters}")
             session = session_info.get("session")
             session_id = session.split("/")[-1]
             recipient_number = session_id.split("&")[0]
