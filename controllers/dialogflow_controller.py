@@ -211,6 +211,7 @@ class DialogflowController:
                 return {"status": "error", "message": "Missing session information."}
 
             parameters = session_info.get("parameters")
+            print(parameters)
             session = session_info.get("session")
             session_id = session.split("/")[-1]
             recipient_number = session_id.split("&")[0]
