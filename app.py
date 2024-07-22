@@ -110,11 +110,6 @@ def dialogflow_webhook():
 
 
 def cx_response():
-   data = request.get_json(silent=True, force=True)
-   tag = data["fulfillmentInfo"]["tag"]
-
-
-   if tag == "Welcome":
        reply = {
            "fulfillmentResponse": {
                "messages": [
