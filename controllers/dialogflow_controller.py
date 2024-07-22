@@ -231,15 +231,12 @@ class DialogflowController:
 
             parameters = session_info.get("parameters")
             session = session_info.get("session")
-            print("session:", session)
             session_id = session.split("/")[-1]
             recipient_number = session_id.split("&")[0]
             chat_session_id = session_id.split("&")[1] if "&" in session_id else None
 
             if fulfillment_info and "tag" in fulfillment_info:
                 tag = fulfillment_info["tag"]
-                print("Processing tag:", tag)
-
                 if tag == 'validateCollectedPostJobData' or tag == 'validateCollectedFindJobData':
                     webhook_response = await self.process_post_job_data(parameters, text)
                     return webhook_response
