@@ -273,18 +273,18 @@ class DialogflowController:
         try:
             json_parameters = {}
 
-            if 'job_description' in parameters and parameters['job_description']:
-                if text and text not in parameters['job_description']:
-                    json_parameters["job_description"] = f"{parameters['job_description']} {text}".strip()
-                else:
-                    json_parameters["job_description"] = parameters['job_description']
-            else:
-                json_parameters["job_description"] = text
+            # if 'job_description' in parameters and parameters['job_description']:
+            #     if text and text not in parameters['job_description']:
+            #         json_parameters["job_description"] = f"{parameters['job_description']} {text}".strip()
+            #     else:
+            #         json_parameters["job_description"] = parameters['job_description']
+            # else:
+            #     json_parameters["job_description"] = text
 
-            if not parameters.get('job_category') and text:
-                get_job_category = await self.get_job_category(text)
-                if get_job_category:
-                    json_parameters["job_category"] = get_job_category
+            # if not parameters.get('job_category') and text:
+            #     get_job_category = await self.get_job_category(text)
+            #     if get_job_category:
+            #         json_parameters["job_category"] = get_job_category
 
             if parameters.get('date_time') and (not parameters.get('date') or not parameters.get('time')):
                 date_time = parameters.get('date_time')
@@ -306,13 +306,13 @@ class DialogflowController:
                 if time_param:
                     json_parameters["time"] = time_param
 
-            if parameters.get('zip_code'):
-                zip_code = parameters.get('zip_code')
-                valid_zip_code, zip_code_data = await self.is_valid_zip_code(zip_code)
-                if not valid_zip_code:
-                    json_parameters["zip_code"] = None
-                else:
-                    json_parameters["location_data"] = f"{zip_code_data['city']}, {zip_code_data['state_id']}"
+            # if parameters.get('zip_code'):
+            #     zip_code = parameters.get('zip_code')
+            #     valid_zip_code, zip_code_data = await self.is_valid_zip_code(zip_code)
+            #     if not valid_zip_code:
+            #         json_parameters["zip_code"] = None
+            #     else:
+            #         json_parameters["location_data"] = f"{zip_code_data['city']}, {zip_code_data['state_id']}"
 
             if parameters.get('amount'):
                 if float(parameters['amount']['amount']) < 10:
