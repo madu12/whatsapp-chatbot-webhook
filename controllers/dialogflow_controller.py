@@ -171,7 +171,6 @@ class DialogflowController:
             }
 
             if text_response:
-                logging.info(f"Text response: {text_response}")
                 response["fulfillment_response"]["messages"] = [
                     {
                         "text": {
@@ -181,7 +180,6 @@ class DialogflowController:
                 ]
 
             if payload_response:
-                logging.info(f"Payload response: {payload_response}")
                 response["fulfillment_response"]["messages"] = [
                     {
                         "payload": payload_response
@@ -189,14 +187,10 @@ class DialogflowController:
                 ]
 
             if parameters:
-                logging.info(f"Parameters: {parameters}")
                 response["session_info"]["parameters"] = parameters
-
-            logging.info(f"Final response: {response}")
             return response
 
         except Exception as e:
-            logging.error(f"Error in generating webhook response: {e}")
             raise e
 
     async def handle_dialogflow_webhook(self, body):
@@ -304,7 +298,7 @@ class DialogflowController:
                 if float(parameters['amount']['amount']) < 10:
                     json_parameters["amount"] = None
                     return await self.webhook_response("Minimum price is $10 for this job.", None, json_parameters)
-
+            print(json_parameters)
             return await self.webhook_response(None, None, json_parameters)
 
         except Exception as e:
