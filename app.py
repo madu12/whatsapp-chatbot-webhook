@@ -108,21 +108,22 @@ def dialogflow_webhook():
    print("Webhook response:", cx_response())
    return jsonify(cx_response()), 200
 
+
 def cx_response():
-    reply = {
-        "fulfillmentResponse": {
-            "messages": [
-                {
-                    "text": {
-                        "text": [
-                            'This is a response from webhook. azure'
-                        ]
-                    }
-                }
-            ]
-        }
-    }
-    return reply
+       reply = {
+           "fulfillmentResponse": {
+               "messages": [
+                   {
+                       "text": {
+                           "text": [
+                               'This is a response from webhook.azure'
+                           ]
+                       }
+                   }
+               ]
+           }
+       }
+       return reply
 @app.route('/success', methods=['GET'])
 async def order_success():
     payment_id = request.args.get('paymentID')
@@ -165,5 +166,5 @@ async def order_success():
         return redirect(url_for('home'))
 
 if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 8000))
+    port = int(os.environ.get('PORT', 80))
     app.run(host='0.0.0.0', port=port, debug=True, use_reloader=True)
