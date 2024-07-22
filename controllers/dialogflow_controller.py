@@ -166,16 +166,16 @@ class DialogflowController:
         """
         try:
             response = {
-                "fulfillment_response": {
+                "fulfillmentResponse": {
                     "messages": []
                 },
-                "session_info": {
+                "sessionInfo": {
                     "parameters": {}
                 }
             }
 
             if text_response:
-                response["fulfillment_response"]["messages"].append(
+                response["fulfillmentResponse"]["messages"].append(
                     {
                         "text": {
                             "text": [text_response]
@@ -184,22 +184,22 @@ class DialogflowController:
                 )
 
             if payload_response:
-                response["fulfillment_response"]["messages"].append(
+                response["fulfillmentResponse"]["messages"].append(
                     {
                         "payload": payload_response
                     }
                 )
 
             if parameters:
-                response["session_info"]["parameters"] = parameters
+                response["sessionInfo"]["parameters"] = parameters
 
             # Remove "session_info" if no parameters were added
-            if not response["session_info"]["parameters"]:
-                del response["session_info"]
+            if not response["sessionInfo"]["parameters"]:
+                del response["sessionInfo"]
 
             # Remove "fulfillment_response" if no messages were added
-            if not response["fulfillment_response"]["messages"]:
-                del response["fulfillment_response"]
+            if not response["fulfillmentResponse"]["messages"]:
+                del response["fulfillmentResponse"]
 
             return response
 
