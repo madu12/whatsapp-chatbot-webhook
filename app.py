@@ -104,7 +104,7 @@ async def webhook():
 #         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/dialogflow_webhook', methods=['GET', 'POST'])
-def dialogflow_webhook():
+async def dialogflow_webhook():
    print("Webhook response:", cx_response())
    return jsonify(cx_response()), 200
 
