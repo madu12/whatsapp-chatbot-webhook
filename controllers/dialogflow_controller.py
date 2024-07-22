@@ -165,44 +165,39 @@ class DialogflowController:
             dict: The structured webhook response.
         """
         try:
-            response = {
-                "fulfillment_response": {
-                    "messages": []
-                },
-                "session_info": {
-                    "parameters": {}
-                }
-            }
-
             if text_response:
-                response["fulfillment_response"]["messages"].append(
-                    {
-                        "text": {
-                            "text": [text_response]
-                        }
+                response = {
+                    'fulfillment_response': {
+                        'messages': [
+                            {
+                                'text': {
+                                    'text': [text_response]
+                                }
+                            }
+                        ]
                     }
-                )
+                }
 
             if payload_response:
-                response["fulfillment_response"]["messages"].append(
-                    {
-                        "payload": payload_response
+                response = {
+                    'fulfillment_response': {
+                        'messages': [
+                            {
+                                'text': {
+                                    'payload': payload_response
+                                }
+                            }
+                        ]
                     }
-                )
-
+                }
+            
             if parameters:
-                response["session_info"]["parameters"] = parameters
-
-            # Remove "session_info" if no parameters were added
-            if not response["session_info"]["parameters"]:
-                del response["session_info"]
-
-            # Remove "fulfillment_response" if no messages were added
-            if not response["fulfillment_response"]["messages"]:
-                del response["fulfillment_response"]
-
+                response = {
+                    'session_info': {
+                        'parameters': parameters
+                    }
+                }
             return response
-
         except Exception as e:
             raise e
 
