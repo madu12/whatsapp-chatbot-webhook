@@ -103,25 +103,31 @@ async def webhook():
 #         print(f"Error processing Dialogflow webhook: {e}")
 #         return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route("/dialogflow_webhook", methods=["POST"])
-async def dialogflow_webhook():
+@app.route('/dialogflow_webhook', methods=['GET', 'POST'])
+def dialogflow_webhook():
    return make_response(jsonify(cx_response()))
 
 
 def cx_response():
-    data = request.get_json(silent=True, force=True)
-    tag = data["fulfillmentInfo"]["tag"]
+   data = request.get_json(silent=True, force=True)
+   tag = data["fulfillmentInfo"]["tag"]
 
 
-    if tag == "validateCollectedPostJobData":
+   if tag == "Welcome":
        reply = {
-           "sessionInfo": {
-                "parameters": {'job_description': 'Dog walking, $45, next Saturday at 10am, 92101', 'job_category': 'pet care', 'location_data': 'San Diego, CA'},
-            },
+           "fulfillmentResponse": {
+               "messages": [
+                   {
+                       "text": {
+                           "text": [
+                               'This is a response from webhook.'
+                           ]
+                       }
+                   }
+               ]
+           }
        }
        return reply
-
-
 @app.route('/success', methods=['GET'])
 async def order_success():
     payment_id = request.args.get('paymentID')
