@@ -193,7 +193,7 @@ class DialogflowController:
             
             if parameters:
                 response = {
-                    'session_info': {
+                    'sessionInfo': {
                         'parameters': parameters
                     }
                 }
