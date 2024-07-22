@@ -104,7 +104,7 @@ async def webhook():
 #         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/dialogflow_webhook', methods=['GET', 'POST'])
-async def dialogflow_webhook():
+def dialogflow_webhook():
    print("Webhook response:", cx_response())
    return jsonify(cx_response()), 200
 
@@ -166,5 +166,6 @@ async def order_success():
         return redirect(url_for('home'))
 
 if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 80))
-    app.run(host='0.0.0.0', port=port, debug=True, use_reloader=True)
+    # port = int(os.environ.get('PORT', 80))
+    # app.run(host='0.0.0.0', port=port, debug=True, use_reloader=True)
+    app.run()
