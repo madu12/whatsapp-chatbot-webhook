@@ -43,6 +43,7 @@ class DialogflowClient:
                 parameters = {
                     "job_description": dialogflow.cx.v3.Value(string_value="Dog walking, $35, next Saturday at 10am, 92101"),
                     "job_category": dialogflow.cx.v3.Value(string_value="pet care"),
+                    "job_category2": dialogflow.cx.v3.Value(string_value="pet care"),
                     "location_data": dialogflow.cx.v3.Value(string_value="San Diego, CA")
                 }
                 query_parameters = dialogflow.QueryParameters(parameters=Struct(fields=parameters))
