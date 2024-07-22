@@ -34,7 +34,7 @@ Send a message with the text "Hi" to our contact. This initial message will auto
 ### Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/whatsapp-chatbot.git
+git clone https://github.com/madu12/whatsapp-chatbot.git
 cd whatsapp-chatbot
 ```
 
@@ -74,67 +74,83 @@ GOOGLE_MAPS_API_KEY=your_google_maps_api_key
 ### Database Setup
 Ensure your database is set up and running. Use the following SQL queries to create the necessary tables:
 ```sql
-CREATE TABLE users (
-    id INT IDENTITY(1,1) PRIMARY KEY,
-    name NVARCHAR(255) NOT NULL,
-    phone_number NVARCHAR(15) NOT NULL UNIQUE,
-    created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(),
-    updated_at DATETIMEOFFSET
-);
+-- Create 'users' table if it doesn't exist
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='users' AND xtype='U')
+BEGIN
+    CREATE TABLE users (
+        id INT IDENTITY(1,1) PRIMARY KEY,
+        name NVARCHAR(255) NOT NULL,
+        phone_number NVARCHAR(15) NOT NULL UNIQUE,
+        created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(),
+        updated_at DATETIMEOFFSET
+    );
+END;
 
-CREATE TABLE categories (
-    id INT IDENTITY(1,1) PRIMARY KEY,
-    name NVARCHAR(255) NOT NULL UNIQUE
-);
+-- Create 'categories' table if it doesn't exist
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='categories' AND xtype='U')
+BEGIN
+    CREATE TABLE categories (
+        id INT IDENTITY(1,1) PRIMARY KEY,
+        name NVARCHAR(255) NOT NULL UNIQUE
+    );
+    CREATE INDEX idx_category_name ON categories(name);
+END;
 
-CREATE INDEX idx_category_name ON categories(name);
+-- Create 'addresses' table if it doesn't exist
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='addresses' AND xtype='U')
+BEGIN
+    CREATE TABLE addresses (
+        id INT IDENTITY(1,1) PRIMARY KEY,
+        street NVARCHAR(255),
+        city NVARCHAR(255) NOT NULL,
+        state NVARCHAR(255) NOT NULL,
+        zip_code NVARCHAR(10) NOT NULL,
+        country NVARCHAR(255) NOT NULL DEFAULT 'USA',
+        address_index VARCHAR(255) NOT NULL,
+        user_id INT NOT NULL FOREIGN KEY REFERENCES users(id)
+    );
+    CREATE INDEX idx_address_index ON addresses(address_index);
+END;
 
-CREATE TABLE addresses (
-    id INT IDENTITY(1,1) PRIMARY KEY,
-    street NVARCHAR(255),
-    city NVARCHAR(255) NOT NULL,
-    state NVARCHAR(255) NOT NULL,
-    zip_code NVARCHAR(10) NOT NULL,
-    country NVARCHAR(255) NOT NULL DEFAULT 'USA',
-    address_index VARCHAR(255) NOT NULL,
-    user_id INT NOT NULL FOREIGN KEY REFERENCES users(id)
-);
+-- Create 'jobs' table if it doesn't exist
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='jobs' AND xtype='U')
+BEGIN
+    CREATE TABLE jobs (
+        id INT IDENTITY(1,1) PRIMARY KEY,
+        job_description NVARCHAR(255) NOT NULL,
+        category_id INT NOT NULL FOREIGN KEY REFERENCES categories(id),
+        date_time DATETIMEOFFSET NOT NULL,
+        amount DECIMAL(10,2) NOT NULL,
+        posting_fee DECIMAL(10,2),
+        zip_code NVARCHAR(10) NOT NULL,
+        posted_by INT NOT NULL FOREIGN KEY REFERENCES users(id),
+        accepted_by INT FOREIGN KEY REFERENCES users(id),
+        payment_id NVARCHAR(255),
+        status NVARCHAR(255) DEFAULT 'pending',
+        payment_status NVARCHAR(255) DEFAULT 'unpaid',
+        address_id INT FOREIGN KEY REFERENCES addresses(id),
+        payment_intent NVARCHAR(255),
+        payment_transfer_id NVARCHAR(255),
+        created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(),
+        updated_at DATETIMEOFFSET
+    );
+    CREATE INDEX idx_job_status ON jobs(status);
+    CREATE INDEX idx_job_date_time ON jobs(date_time);
+    CREATE INDEX idx_job_category_id ON jobs(category_id);
+END;
 
-CREATE INDEX idx_address_index ON addresses(address_index);
-
-CREATE TABLE jobs (
-    id INT IDENTITY(1,1) PRIMARY KEY,
-    job_description NVARCHAR(255) NOT NULL,
-    category_id INT NOT NULL FOREIGN KEY REFERENCES categories(id),
-    date_time DATETIMEOFFSET NOT NULL,
-    amount DECIMAL(10,2) NOT NULL,
-    posting_fee DECIMAL(10,2),
-    zip_code NVARCHAR(10) NOT NULL,
-    posted_by INT NOT NULL FOREIGN KEY REFERENCES users(id),
-    accepted_by INT FOREIGN KEY REFERENCES users(id),
-    payment_id NVARCHAR(255),
-    status NVARCHAR(255) DEFAULT 'pending',
-    payment_status NVARCHAR(255) DEFAULT 'unpaid',
-    address_id INT FOREIGN KEY REFERENCES addresses(id),
-    payment_intent NVARCHAR(255),
-    payment_transfer_id NVARCHAR(255),
-    created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(),
-    updated_at DATETIMEOFFSET
-);
-
-CREATE INDEX idx_job_status ON jobs(status);
-CREATE INDEX idx_job_date_time ON jobs(date_time);
-CREATE INDEX idx_job_category_id ON jobs(category_id);
-
-CREATE TABLE chat_sessions (
-    id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-    job_id INT FOREIGN KEY REFERENCES jobs(id),
-    job_type NVARCHAR(255),
-    user_id INT NOT NULL FOREIGN KEY REFERENCES users(id),
-    created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET()
-);
-
-CREATE INDEX idx_chat_session_id ON chat_sessions(id);
+-- Create 'chat_sessions' table if it doesn't exist
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='chat_sessions' AND xtype='U')
+BEGIN
+    CREATE TABLE chat_sessions (
+        id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+        job_id INT FOREIGN KEY REFERENCES jobs(id),
+        job_type NVARCHAR(255),
+        user_id INT NOT NULL FOREIGN KEY REFERENCES users(id),
+        created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET()
+    );
+    CREATE INDEX idx_chat_session_id ON chat_sessions(id);
+END;
 ```
 
 ### Run the Application

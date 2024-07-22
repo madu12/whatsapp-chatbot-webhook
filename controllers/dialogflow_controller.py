@@ -237,8 +237,18 @@ class DialogflowController:
 
             if fulfillment_info and "tag" in fulfillment_info:
                 tag = fulfillment_info["tag"]
+                if tag == 'predictCategory':
+                    webhook_response = await self.predict_category(parameters, text)
+                    return webhook_response
+                
+                if tag == 'confirmCategory':
+                    confirmed_category = parameters.get('job_category')
+                    job_description = parameters.get('job_description')
+                    webhook_response = await self.confirm_category(job_description, confirmed_category)
+                    return webhook_response
+                
                 if tag == 'validateCollectedPostJobData' or tag == 'validateCollectedFindJobData':
-                    webhook_response = await self.process_post_job_data(parameters, text)
+                    webhook_response = await self.validate_job_data(parameters, text)
                     return webhook_response
 
                 if tag == 'postJobDataConfirmation':
@@ -253,14 +263,13 @@ class DialogflowController:
         except Exception as e:
             print(f"Error processing Dialogflow webhook: {e}")
             return {"status": "error", "message": str(e)}
-
-    async def process_post_job_data(self, parameters, text=None):
+        
+    async def predict_category(self, parameters, text=None):
         """
-        Process the collected post job data.
+        Predict the job category using the ML model.
 
         Args:
             parameters (dict): The parameters from Dialogflow.
-            text (str, optional): Additional text to process. Defaults to None.
 
         Returns:
             dict: The webhook response with updated parameters.
@@ -276,11 +285,102 @@ class DialogflowController:
             else:
                 json_parameters["job_description"] = text
 
-            if not parameters.get('job_category') and text:
-                get_job_category = await self.get_job_category(text)
-                if get_job_category:
-                    json_parameters["job_category"] = get_job_category
+            ml_response = await self.get_job_category(json_parameters["job_description"])
+            if ml_response:
+                category = ml_response.get('category').capitalize()
+                suggested_by_gemini = ml_response.get('suggested_by_gemini').capitalize()
 
+                # If ML model returns one category or both categories are the same
+                if category and (not suggested_by_gemini or category == suggested_by_gemini):
+                    json_parameters["job_category"] = category
+                    json_parameters["category_predicted"] = "single"
+                    return await self.webhook_response(None, None, json_parameters)
+
+                # If ML model returns multiple suggestions
+                if category and suggested_by_gemini:
+                    response_message = (
+                        f"We have detected multiple categories for your job:\n"
+                        f"1. {category}\n"
+                        f"2. {suggested_by_gemini}\n\n"
+                        "Please confirm the category you prefer."
+                    )
+
+                    payload_response = {
+                        "richContent": [
+                            {
+                                "text": response_message
+                            },
+                            {
+                                "type": "chips",
+                                "options": [
+                                    {"text": category},
+                                    {"text": suggested_by_gemini},
+                                ]
+                            }
+                        ]
+                    }
+                    json_parameters["category_predicted"] = "multiple"
+                    return await self.webhook_response(None, payload_response, json_parameters)
+
+            # If ML model cannot predict the category
+            json_parameters["category_predicted"] = "zero"
+            return await self.webhook_response("We could not predict a category for your job. Please provide more details.", None, json_parameters)
+
+        except Exception as e:
+            print(f"Error processing job data: {e}")
+            return {"message": "Error processing job data.", "status": 500}
+
+    async def confirm_category(self, job_description, confirmed_category):
+        """
+        Confirm the job category with the ML model.
+
+        Args:
+            job_description (str): The job description.
+            confirmed_category (str): The category confirmed by the user.
+
+        Returns:
+            dict: The response from the ML model.
+        """
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {CLASSIFICATION_MODEL_API_KEY}'
+        }
+        payload = {
+            'service_description': job_description,
+            'confirmed_category': confirmed_category
+        }
+
+        try:
+            response = await sync_to_async(requests.post)(f"{CLASSIFICATION_MODEL_API_URL}/confirm_category", json=payload, headers=headers)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            print(f"Error confirming category with ML model: {e}")
+            return {"error": str(e)}
+        
+    async def validate_job_data(self, parameters, text=None):
+        """
+        Validate the collected post job data.
+
+        Args:
+            parameters (dict): The parameters from Dialogflow.
+
+        Returns:
+            dict: The webhook response with updated parameters.
+        """
+        try:
+            json_parameters = {}
+
+            # Update job description
+            if 'job_description' in parameters and parameters['job_description']:
+                if text and text not in parameters['job_description']:
+                    json_parameters["job_description"] = f"{parameters['job_description']} {text}".strip()
+                else:
+                    json_parameters["job_description"] = parameters['job_description']
+            else:
+                json_parameters["job_description"] = text
+
+            # Extract date and time if not already set
             if parameters.get('date_time') and (not parameters.get('date') or not parameters.get('time')):
                 date_time = parameters.get('date_time')
                 date_param = {
@@ -301,6 +401,7 @@ class DialogflowController:
                 if time_param:
                     json_parameters["time"] = time_param
 
+            # Validate zip code
             if parameters.get('zip_code'):
                 zip_code = parameters.get('zip_code')
                 valid_zip_code, zip_code_data = await self.is_valid_zip_code(zip_code)
@@ -309,15 +410,17 @@ class DialogflowController:
                 else:
                     json_parameters["location_data"] = f"{zip_code_data['city']}, {zip_code_data['state_id']}"
 
+            # Validate amount
             if parameters.get('amount'):
                 if float(parameters['amount']['amount']) < 10:
                     json_parameters["amount"] = None
                     return await self.webhook_response("Minimum price is $10 for this job.", None, json_parameters)
+            
             return await self.webhook_response(None, None, json_parameters)
 
         except Exception as e:
-            print(f"Error processing job data: {e}")
-            return {"message": "Error processing job data.", "status": 500}
+            print(f"Error validating job data: {e}")
+            return {"message": "Error validating job data.", "status": 500}
 
     async def post_job_data_confirmation(self, parameters):
         """
@@ -451,7 +554,8 @@ class DialogflowController:
 
             # Format job ID
             job_id_padded = str(job.id).zfill(5)
-
+            print(job_id_padded)
+        
             # Create or retrieve Stripe customer
             customer_data = {
                 "name": user.name,
@@ -530,34 +634,28 @@ class DialogflowController:
             print(f"Error saving job data: {e}")
             return {"error": "Failed to save job data"}
 
-    async def get_job_category(self, text):
+    async def get_job_category(self, service_description):
         """
-        Get the job category from the text using an Classification model API.
+        Predict the job category using the ML model.
 
         Args:
-            text (str): The text to extract the category from.
+            job_description (str): The job description.
 
         Returns:
-            str: The extracted job category.
+            dict: The response from the ML model with category suggestions.
         """
-
-        return 'pet care' #testing
         headers = {
             'Content-Type': 'application/json',
             'Authorization': f'Bearer {CLASSIFICATION_MODEL_API_KEY}'
         }
         payload = {
-            'text': text
+            'service_description': service_description
         }
 
         try:
-            response = requests.post(CLASSIFICATION_MODEL_API_URL, json=payload, headers=headers)
+            response = await sync_to_async(requests.post)(f"{CLASSIFICATION_MODEL_API_URL}/predict", json=payload, headers=headers)
             response.raise_for_status()
-            category = response.json().get('category')
-            if category:
-                return category
-            else:
-                return None
+            return response.json()
         except requests.exceptions.RequestException as e:
             print(f"Error calling ML model API: {e}")
             return None
