@@ -226,7 +226,9 @@ class DialogflowController:
                 tag = fulfillment_info["tag"]
 
                 if tag == 'validateCollectedPostJobData' or tag == 'validateCollectedFindJobData':
-                    return await self.process_post_job_data(parameters, text)
+                    webhook_response = await self.process_post_job_data(parameters, text)
+                    print(webhook_response)
+                    return webhook_response
 
                 if tag == 'postJobDataConfirmation':
                     return await self.post_job_data_confirmation(parameters)
@@ -298,7 +300,6 @@ class DialogflowController:
                 if float(parameters['amount']['amount']) < 10:
                     json_parameters["amount"] = None
                     return await self.webhook_response("Minimum price is $10 for this job.", None, json_parameters)
-            print(json_parameters)
             return await self.webhook_response(None, None, json_parameters)
 
         except Exception as e:
