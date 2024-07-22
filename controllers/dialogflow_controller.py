@@ -166,32 +166,46 @@ class DialogflowController:
         """
         try:
             response = {
-                "fulfillment_response": {},
-                "session_info": {}
+                "fulfillment_response": {
+                    "messages": []
+                },
+                "session_info": {
+                    "parameters": {}
+                }
             }
 
             if text_response:
-                response["fulfillment_response"]["messages"] = [
+                response["fulfillment_response"]["messages"].append(
                     {
                         "text": {
                             "text": [text_response]
                         }
                     }
-                ]
+                )
 
             if payload_response:
-                response["fulfillment_response"]["messages"] = [
+                response["fulfillment_response"]["messages"].append(
                     {
                         "payload": payload_response
                     }
-                ]
+                )
 
             if parameters:
                 response["session_info"]["parameters"] = parameters
+
+            # Remove "session_info" if no parameters were added
+            if not response["session_info"]["parameters"]:
+                del response["session_info"]
+
+            # Remove "fulfillment_response" if no messages were added
+            if not response["fulfillment_response"]["messages"]:
+                del response["fulfillment_response"]
+
             return response
 
         except Exception as e:
             raise e
+
 
     async def handle_dialogflow_webhook(self, body):
         """
@@ -216,7 +230,6 @@ class DialogflowController:
                 return {"status": "error", "message": "Missing session information."}
 
             parameters = session_info.get("parameters")
-            print(f"parameters: {parameters}")
             session = session_info.get("session")
             session_id = session.split("/")[-1]
             recipient_number = session_id.split("&")[0]
