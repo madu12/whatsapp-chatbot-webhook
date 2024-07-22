@@ -6,7 +6,6 @@ from controllers.whatsapp_controller import WhatsAppController
 from clients.whatsapp_client import WhatsAppClient
 from controllers.dialogflow_controller import DialogflowController
 from config import WHATSAPP_VERIFY_TOKEN,  STRIPE_SECRET_KEY
-import logging
 
 app = Flask(__name__, static_folder='assets')
 
@@ -93,12 +92,10 @@ async def dialogflow_webhook():
     """
     body = request.get_json()
     try:
-        logging.info(f"Received request body: {body}")
         response = await dialogflow_controller.handle_dialogflow_webhook(body)
         return jsonify(response), 200
     except Exception as e:
         print(f"Error processing Dialogflow webhook: {e}")
-        logging.error(f"Error processing Dialogflow webhook: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/success', methods=['GET'])
@@ -144,5 +141,4 @@ async def order_success():
 
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 8000))
-    logging.basicConfig(level=logging.INFO)
     app.run(host='0.0.0.0', port=port, debug=True, use_reloader=True)
