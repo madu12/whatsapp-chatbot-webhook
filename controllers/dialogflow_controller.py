@@ -237,17 +237,22 @@ class DialogflowController:
 
             if fulfillment_info and "tag" in fulfillment_info:
                 tag = fulfillment_info["tag"]
+                print("Processing tag:", tag)  # Logging the tag being processed
 
                 if tag == 'validateCollectedPostJobData' or tag == 'validateCollectedFindJobData':
                     webhook_response = await self.process_post_job_data(parameters, text)
-                    print(webhook_response)
+                    print("Processed post job data response:", webhook_response)
                     return webhook_response
 
                 if tag == 'postJobDataConfirmation':
-                    return await self.post_job_data_confirmation(parameters)
+                    response = await self.post_job_data_confirmation(parameters)
+                    print("Post job data confirmation response:", response)
+                    return response
 
                 if tag == 'postJobDataSave':
-                    return await self.post_job_data_save(parameters, recipient_number, chat_session_id)
+                    response = await self.post_job_data_save(parameters, recipient_number, chat_session_id)
+                    print("Post job data save response:", response)
+                    return response
 
             return {"status": "error", "message": "No valid tag found in fulfillment info."}
         except Exception as e:
