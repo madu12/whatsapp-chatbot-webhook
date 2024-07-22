@@ -1,7 +1,6 @@
 import json
 from google.cloud import dialogflowcx_v3 as dialogflow
 from google.oauth2 import service_account
-from google.protobuf.struct_pb2 import Struct
 from config import DIALOGFLOW_CX_CREDENTIALS, DIALOGFLOW_CX_AGENTID, DIALOGFLOW_CX_LOCATION
 
 class DialogflowClient:
@@ -40,13 +39,6 @@ class DialogflowClient:
                 # Construct the session path
                 session_id = f"{recipient_number}{'&' + chat_session_id if chat_session_id else ''}"
                 session_path = f"projects/{self.dialogflow_project_id}/locations/{self.dialogflow_location}/agents/{self.dialogflow_agent_id}/sessions/{session_id}"
-                parameters = {
-                    "job_description": dialogflow.cx.v3.Value(string_value="Dog walking, $35, next Saturday at 10am, 92101"),
-                    "job_category": dialogflow.cx.v3.Value(string_value="pet care"),
-                    "job_category2": dialogflow.cx.v3.Value(string_value="pet care"),
-                    "location_data": dialogflow.cx.v3.Value(string_value="San Diego, CA")
-                }
-                query_parameters = dialogflow.QueryParameters(parameters=Struct(fields=parameters))
 
                 # Create the query input
                 query_input = dialogflow.QueryInput(
@@ -58,8 +50,6 @@ class DialogflowClient:
                 request = dialogflow.DetectIntentRequest(
                     session=session_path,
                     query_input=query_input,
-                    query_params=query_parameters,
-                    
                 )
 
                 # Detect the intent and return the result
