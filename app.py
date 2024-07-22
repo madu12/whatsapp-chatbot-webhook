@@ -144,5 +144,5 @@ async def order_success():
         return redirect(url_for('home'))
 
 if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 8000))
+    port = int(os.environ.get('PORT', 80))
     app.run(host='0.0.0.0', port=port, debug=True, use_reloader=True)
