@@ -277,6 +277,7 @@ class DialogflowController:
         try:
             json_parameters = {}
 
+            # Combine existing job description with new text if provided
             if 'job_description' in parameters and parameters['job_description']:
                 if text and text not in parameters['job_description']:
                     json_parameters["job_description"] = f"{parameters['job_description']} {text}".strip()
@@ -285,19 +286,33 @@ class DialogflowController:
             else:
                 json_parameters["job_description"] = text
 
+            # Call the ML model to get category suggestions
             ml_response = await self.get_job_category(json_parameters["job_description"])
             if ml_response:
-                category = ml_response.get('category').capitalize()
-                suggested_by_gemini = ml_response.get('suggested_by_gemini').capitalize()
+                category = ml_response.get('category')
+                suggested_by_gemini = ml_response.get('suggested_by_gemini')
+                verification_status_by_gemini = ml_response.get('verification_status_by_gemini', 'incorrect').lower()
 
-                # If ML model returns one category or both categories are the same
+                # Normalize category and suggested_by_gemini to capitalize for display
+                if category:
+                    category = category.capitalize()
+                if suggested_by_gemini:
+                    suggested_by_gemini = suggested_by_gemini.capitalize()
+
+                # Case 1: ML model returns one category or both categories are the same
                 if category and (not suggested_by_gemini or category == suggested_by_gemini):
                     json_parameters["job_category"] = category
                     json_parameters["category_predicted"] = "single"
                     return await self.webhook_response(None, None, json_parameters)
 
-                # If ML model returns multiple suggestions
-                if category and suggested_by_gemini:
+                # Case 2: Gemini verification suggests a different category and verification_status_by_gemini is incorrect
+                if verification_status_by_gemini == 'incorrect' and suggested_by_gemini and suggested_by_gemini != 'None':
+                    json_parameters["job_category"] = suggested_by_gemini
+                    json_parameters["category_predicted"] = "single"
+                    return await self.webhook_response(None, None, json_parameters)
+
+                # Case 3: ML model returns multiple suggestions and verification_status_by_gemini is correct
+                if category and suggested_by_gemini and suggested_by_gemini != 'None' and verification_status_by_gemini == 'correct':
                     response_message = (
                         f"We have detected multiple categories for your job:\n"
                         f"1. {category}\n"
@@ -322,13 +337,19 @@ class DialogflowController:
                     json_parameters["category_predicted"] = "multiple"
                     return await self.webhook_response(None, payload_response, json_parameters)
 
-            # If ML model cannot predict the category
+                # Case 4: Gemini verification suggests 'none' as category
+                if verification_status_by_gemini == 'incorrect' and suggested_by_gemini == 'None':
+                    json_parameters["category_predicted"] = "zero"
+                    return await self.webhook_response(None, None, json_parameters)
+
+            # Case 5: ML model cannot predict the category
             json_parameters["category_predicted"] = "zero"
-            return await self.webhook_response("We could not predict a category for your job. Please provide more details.", None, json_parameters)
+            return await self.webhook_response(None, None, json_parameters)
 
         except Exception as e:
             print(f"Error processing job data: {e}")
             return {"message": "Error processing job data.", "status": 500}
+
 
     async def confirm_category(self, job_description, confirmed_category):
         """
@@ -554,7 +575,6 @@ class DialogflowController:
 
             # Format job ID
             job_id_padded = str(job.id).zfill(5)
-            print(job_id_padded)
         
             # Create or retrieve Stripe customer
             customer_data = {
