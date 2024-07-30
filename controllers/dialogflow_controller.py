@@ -301,22 +301,60 @@ class DialogflowController:
 
                 # Case 1: ML model returns one category or both categories are the same
                 if category and (not suggested_by_gemini or category == suggested_by_gemini):
+                    response_message = (
+                        f"We recommend posting your job under the *'{category}'* category. "
+                        "Please confirm if this is correct."
+                    )
+                    payload_response = {
+                        "richContent": [
+                            {
+                                "text": response_message
+                            },
+                            {
+                                "type": "chips",
+                                "options": [
+                                    {"text": "Yes"},
+                                    {"text": "No"}
+                                ]
+                            }
+                        ]
+                    }
                     json_parameters["job_category"] = category
                     json_parameters["category_predicted"] = "single"
-                    return await self.webhook_response(None, None, json_parameters)
+                    return await self.webhook_response(None, payload_response, json_parameters)
 
                 # Case 2: Gemini verification suggests a different category and verification_status_by_gemini is incorrect
-                if verification_status_by_gemini == 'incorrect' and suggested_by_gemini and suggested_by_gemini != 'None':
+                elif verification_status_by_gemini == 'incorrect' and suggested_by_gemini and suggested_by_gemini != 'None':
+                    
+                    response_message = (
+                        f"We recommend posting your job under the *{suggested_by_gemini}* category. "
+                        "Please confirm if this is correct."
+                    )
+
+                    payload_response = {
+                        "richContent": [
+                            {
+                                "text": response_message
+                            },
+                            {
+                                "type": "chips",
+                                "options": [
+                                    {"text": "Yes"},
+                                    {"text": "No"}
+                                ]
+                            }
+                        ]
+                    }
                     json_parameters["job_category"] = suggested_by_gemini
                     json_parameters["category_predicted"] = "single"
-                    return await self.webhook_response(None, None, json_parameters)
+                    return await self.webhook_response(None, payload_response, json_parameters)
 
                 # Case 3: ML model returns multiple suggestions and verification_status_by_gemini is correct
-                if category and suggested_by_gemini and suggested_by_gemini != 'None' and verification_status_by_gemini == 'correct':
+                elif category and suggested_by_gemini and suggested_by_gemini != 'None' and verification_status_by_gemini == 'correct':
                     response_message = (
                         f"We have detected multiple categories for your job:\n"
-                        f"1. {category}\n"
-                        f"2. {suggested_by_gemini}\n\n"
+                        f"🔹 {category}\n"
+                        f"🔹 {suggested_by_gemini}\n\n"
                         "Please confirm the category you prefer."
                     )
 
@@ -338,14 +376,14 @@ class DialogflowController:
                     return await self.webhook_response(None, payload_response, json_parameters)
 
                 # Case 4: Gemini verification suggests 'none' as category
-                if verification_status_by_gemini == 'incorrect' and suggested_by_gemini == 'None':
+                elif verification_status_by_gemini == 'incorrect' and suggested_by_gemini == 'None':
                     json_parameters["category_predicted"] = "zero"
                     return await self.webhook_response(None, None, json_parameters)
 
-            # Case 5: ML model cannot predict the category
-            json_parameters["category_predicted"] = "zero"
-            return await self.webhook_response(None, None, json_parameters)
-
+                # Case 5: ML model cannot predict the category
+                else:
+                    json_parameters["category_predicted"] = "zero"
+                    return await self.webhook_response(None, None, json_parameters)
         except Exception as e:
             print(f"Error processing job data: {e}")
             return {"message": "Error processing job data.", "status": 500}
