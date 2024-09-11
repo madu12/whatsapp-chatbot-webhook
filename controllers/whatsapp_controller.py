@@ -13,7 +13,7 @@ class WhatsAppController:
         self.sessions = {}
         self.processed_message_ids = set()
 
-    async def process_text_message(self, recipient_number, recipient_message):
+    async def process_text_message(self, recipient_number, recipient_name, recipient_message):
         """
         Process the text message received from the user.
 
@@ -27,11 +27,15 @@ class WhatsAppController:
 
             user = await UserRepository.get_user_by_phone_number(recipient_number)
             if not user:
-                await self.register_new_user(recipient_number, "User")
+                await self.register_new_user(recipient_number, recipient_name)
                 return
 
             if recipient_message.lower() == "help":
                 await self.send_help_message(recipient_number)
+                return
+            
+            if recipient_message.lower() == "hi":
+                await self.welcome_msg(recipient_number, recipient_name)
                 return
 
             if any(phrase in recipient_message.lower() for phrase in post_job_phrases + find_job_phrases):
@@ -188,10 +192,10 @@ class WhatsAppController:
 
             if message["type"] == "text":
                 recipient_message = message["text"]["body"]
-                await self.process_text_message(recipient_number, recipient_message)
+                await self.process_text_message(recipient_number, recipient_name, recipient_message)
             elif message["type"] == "interactive":
                 interactive_message = message["interactive"]["button_reply"]["id"]
-                await self.process_text_message(recipient_number, interactive_message)
+                await self.process_text_message(recipient_number, recipient_name, interactive_message)
             else:
                 response_message = 'This chatbot only supports text and interactive messages.'
                 await self.whatsapp_client.send_whatsapp_message(recipient_number, response_message)
@@ -201,6 +205,44 @@ class WhatsAppController:
             print(f"Error handling WhatsApp message: {e}")
             return {"status": "error", "message": str(e)}
 
+    async def welcome_msg(self, recipient_number, recipient_name):
+        """
+        Send a welcome message.
+
+        Args:
+            recipient_number (str): The phone number of the recipient.
+            recipient_name (str): The name of the recipient.
+        """
+        try:
+            buttons = [
+                {
+                    "type": "reply",
+                    "reply": {
+                        "id": "Post Job",
+                        "title": "Post Job"
+                    }
+                },
+                {
+                    "type": "reply",
+                    "reply": {
+                        "id": "Find Job",
+                        "title": "Find Job"
+                    }
+                }
+            ]
+            response_message = (
+                f"Hello, {recipient_name}! This is HOME SERVICE CHATBOT! 🏠🤖\n\n"
+                f"✨ What would you like to do today?\n"
+                f"1️⃣ Post Job\n"
+                f"2️⃣ Find Job\n\n"
+                f"If you need any assistance, just type 'help'. 💬"
+            )
+            interactive_message = await self.dialogflow_controller.create_button_message(response_message, buttons)
+            await self.whatsapp_client.send_whatsapp_message(recipient_number, interactive_message, 'interactive')
+        except Exception as e:
+            print(f"Error welcome msg: {e}")
+            await self.send_error_message(recipient_number)
+            
     async def register_new_user(self, recipient_number, recipient_name):
         """
         Register a new user and send a welcome message.

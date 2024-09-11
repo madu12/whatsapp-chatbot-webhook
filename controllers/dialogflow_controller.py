@@ -230,6 +230,7 @@ class DialogflowController:
                 return {"status": "error", "message": "Missing session information."}
 
             parameters = session_info.get("parameters")
+                    
             session = session_info.get("session")
             session_id = session.split("/")[-1]
             recipient_number = session_id.split("&")[0]
@@ -279,13 +280,12 @@ class DialogflowController:
 
             # Combine existing job description with new text if provided
             if 'job_description' in parameters and parameters['job_description']:
-                if text and text not in parameters['job_description']:
+                if text and text not in parameters['job_description'] and text not in ['Yes', 'No']:
                     json_parameters["job_description"] = f"{parameters['job_description']} {text}".strip()
                 else:
                     json_parameters["job_description"] = parameters['job_description']
             else:
                 json_parameters["job_description"] = text
-
             # Call the ML model to get category suggestions
             ml_response = await self.get_job_category(json_parameters["job_description"])
             if ml_response:
@@ -432,7 +432,7 @@ class DialogflowController:
 
             # Update job description
             if 'job_description' in parameters and parameters['job_description']:
-                if text and text not in parameters['job_description']:
+                if text and text not in parameters['job_description'] and text not in ['Yes', 'No']:
                     json_parameters["job_description"] = f"{parameters['job_description']} {text}".strip()
                 else:
                     json_parameters["job_description"] = parameters['job_description']

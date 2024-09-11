@@ -39,7 +39,13 @@ class WhatsAppClient:
             else:
                 data.update({"type": "text", "text": {"preview_url": False, "body": message}})
 
-            await sync_to_async(requests.post)(url, json=data, headers=headers)
+            response = await sync_to_async(requests.post)(url, json=data, headers=headers)
+
+            if response.status_code == 200:
+                return True
+            else:
+                print(f"Failed to send message: {response.status_code} - {response.text}")
+                return False
         except requests.exceptions.HTTPError as http_err:
             print(f"HTTP error occurred: {http_err}")
         except Exception as err:
