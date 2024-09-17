@@ -1,6 +1,6 @@
 from clients.dialogflow_client import DialogflowClient
 import datetime
-from database.repositories import ChatSessionRepository, JobRepository, CategoryRepository, UserRepository
+from database.repositories import AddressRepository, ChatSessionRepository, JobRepository, CategoryRepository, UserRepository
 from clients.stripe_client import StripeClient
 import requests
 from config import GOOGLE_MAPS_API_KEY, CLASSIFICATION_MODEL_API_URL, CLASSIFICATION_MODEL_API_KEY
@@ -47,28 +47,38 @@ class DialogflowController:
         """
         try:
             reply_btn_message = None
+            reply_list_message = None
             simple_text_message = None
 
-            # Process payload messages for buttons
+            # Extract payload messages (for buttons and lists)
             payload_messages = [message for message in fulfillment_messages if hasattr(message, 'payload') and message.payload is not None]
-            text_message = [message for message in fulfillment_messages if 'text' in message.text]
+            text_messages = [message for message in fulfillment_messages if 'text' in message.text]
 
+            # Process payload messages for buttons and lists
             if payload_messages:
-                buttons, payload_text = await self.process_payload_messages(payload_messages)
+                buttons, lists, payload_text = await self.process_payload_messages(payload_messages)
 
-                if not text_message:
+                if not text_messages:
                     payload_text_message = payload_text
                 else:
-                    payload_text_message = text_message[0].text.text[0]
+                    payload_text_message = text_messages[0].text.text[0]
 
+                # Create button message if buttons are found
                 if buttons:
                     reply_btn_message = await self.create_button_message(payload_text_message, buttons)
 
-            if not reply_btn_message and text_message:
-                simple_text_message = text_message[0].text.text[0] if text_message else None
+                # Create list message if lists are found
+                if lists:
+                    reply_list_message = await self.create_list_message(payload_text_message, lists)
 
+            # Process simple text messages if no buttons or lists
+            if not reply_btn_message and not reply_list_message and text_messages:
+                simple_text_message = text_messages[0].text.text[0] if text_messages else None
+
+            # Return the structured message based on the type found
             return {
                 "replyBtnMessage": reply_btn_message,
+                "replyListMessage": reply_list_message,
                 "simpleTextMessage": simple_text_message
             }
         except Exception as e:
@@ -77,15 +87,16 @@ class DialogflowController:
 
     async def process_payload_messages(self, payload_messages):
         """
-        Process payload messages to extract buttons and text.
+        Process payload messages to extract buttons, lists, and text.
 
         Args:
             payload_messages (list): List of payload messages.
 
         Returns:
-            tuple: A tuple containing buttons and payload text.
+            tuple: A tuple containing buttons, lists, and payload text.
         """
         buttons = []
+        lists = []
         payload_text = ''
 
         for payload_message in payload_messages:
@@ -99,24 +110,31 @@ class DialogflowController:
                     payload_text = item_dict['text']
                 elif 'options' in item_dict and item_dict['type'] == 'chips':
                     for option in item_dict['options']:
-                        buttonText = option['text']
-                        anchorHref = option['anchor']['href'] if 'anchor' in option and 'href' in option['anchor'] else ""
-                        if anchorHref:
-                            buttons.append({
-                                "type": "url",
-                                "url": anchorHref,
-                                "title": buttonText
+                        title = option['text']
+                        anchorHref = option.get('anchor', {}).get('href', "")
+                        id = option.get('id', {})
+                        if id:
+                            lists.append({
+                                "id": id,
+                                "title": title
                             })
                         else:
-                            buttons.append({
-                                "type": "reply",
-                                "reply": {
-                                    "id": buttonText,
-                                    "title": buttonText
-                                }
-                            })
+                            if anchorHref:
+                                buttons.append({
+                                    "type": "url",
+                                    "url": anchorHref,
+                                    "title": title
+                                })
+                            else:
+                                buttons.append({
+                                    "type": "reply",
+                                    "reply": {
+                                        "id": title,
+                                        "title": title
+                                    }
+                                })
 
-        return buttons, payload_text
+        return buttons, lists, payload_text
 
     async def create_button_message(self, text, buttons):
         """
@@ -151,15 +169,41 @@ class DialogflowController:
                 "action": {"buttons": buttons}
             }
         }
+    
+    async def create_list_message(self, text, lists):
+        """
+        Create a list message for WhatsApp interactive messages.
 
-    async def webhook_response(self, text_response, payload_response, parameters):
+        Args:
+            text (str): The text to display with the list.
+            lists (list): The list of items.
+
+        Returns:
+            dict: The interactive list message.
+        """
+        return {
+            "interactive": {
+                "type": "list",
+                "body": {"text": text},
+                "action": {
+                    "button": "Choose an option",
+                    "sections": [
+                        {
+                            "rows": lists
+                        }
+                    ]
+                }
+            }
+        }
+
+    async def webhook_response(self, text_response=None, payload_response=None, parameters=None):
         """
         Generate a webhook response for Dialogflow.
 
         Args:
-            text_response (str): The text response.
-            payload_response (dict): The payload response.
-            parameters (dict): The session parameters.
+            text_response (str, optional): The text response to be sent back.
+            payload_response (dict, optional): The payload response (interactive messages).
+            parameters (dict, optional): The session parameters to include in the response.
 
         Returns:
             dict: The structured webhook response.
@@ -174,6 +218,7 @@ class DialogflowController:
                 }
             }
 
+            # Add a text message to the response if provided
             if text_response:
                 response["fulfillmentResponse"]["messages"].append(
                     {
@@ -183,6 +228,7 @@ class DialogflowController:
                     }
                 )
 
+            # Add payload (interactive) messages to the response if provided
             if payload_response:
                 response["fulfillmentResponse"]["messages"].append(
                     {
@@ -190,22 +236,21 @@ class DialogflowController:
                     }
                 )
 
+            # Include any session parameters if provided
             if parameters:
                 response["sessionInfo"]["parameters"] = parameters
 
-            # Remove "session_info" if no parameters were added
+            # Clean up the response by removing empty keys
             if not response["sessionInfo"]["parameters"]:
                 del response["sessionInfo"]
-
-            # Remove "fulfillment_response" if no messages were added
             if not response["fulfillmentResponse"]["messages"]:
                 del response["fulfillmentResponse"]
 
             return response
 
         except Exception as e:
+            print(f"Error generating webhook response: {e}")
             raise e
-
 
     async def handle_dialogflow_webhook(self, body):
         """
@@ -259,6 +304,20 @@ class DialogflowController:
                 if tag == 'postJobDataSave':
                     response = await self.post_job_data_save(parameters, recipient_number, chat_session_id)
                     return response
+                
+                if tag == 'findJobDataList':
+                    response = await self.find_job_data_list(parameters)
+                    return response
+                
+                if tag == 'foundJobsSelectedID':
+                    response = await self.found_jobs_selected_id(parameters, recipient_number)
+                    return response
+                
+                if tag == 'assignUserToAcceptedJob':
+                    response = await self.assign_user_to_accepted_job(parameters, recipient_number)
+                    return response
+                
+                
 
             return {"status": "error", "message": "No valid tag found in fulfillment info."}
         except Exception as e:
@@ -286,6 +345,11 @@ class DialogflowController:
                     json_parameters["job_description"] = parameters['job_description']
             else:
                 json_parameters["job_description"] = text
+
+            # Get job type (post_job/find_job)
+            if 'job_type' in parameters and parameters['job_type']:
+                json_parameters["job_type"] = parameters['job_type']
+
             # Call the ML model to get category suggestions
             ml_response = await self.get_job_category(json_parameters["job_description"])
             if ml_response:
@@ -301,35 +365,52 @@ class DialogflowController:
 
                 # Case 1: ML model returns one category or both categories are the same
                 if category and (not suggested_by_gemini or category == suggested_by_gemini):
-                    response_message = (
-                        f"We recommend posting your job under the *'{category}'* category. "
-                        "Please confirm if this is correct."
-                    )
-                    payload_response = {
-                        "richContent": [
-                            {
-                                "text": response_message
-                            },
-                            {
-                                "type": "chips",
-                                "options": [
-                                    {"text": "Yes"},
-                                    {"text": "No"}
-                                ]
-                            }
-                        ]
-                    }
-                    json_parameters["job_category"] = category
-                    json_parameters["category_predicted"] = "single"
-                    return await self.webhook_response(None, payload_response, json_parameters)
+                    if(json_parameters["job_type"]):
+                        if(json_parameters["job_type"] == 'post_job'):
+                            response_message = (
+                                f"We recommend posting your job under the *'{category}'* category. "
+                                "Please confirm if this is correct."
+                            )
+                        
+                        if(json_parameters["job_type"] == 'find_job'):
+                            response_message = (
+                                f"We recommend finding your job under the *'{category}'* category. "
+                                "Please confirm if this is correct."
+                            )
+
+                        payload_response = {
+                            "richContent": [
+                                {
+                                    "text": response_message
+                                },
+                                {
+                                    "type": "chips",
+                                    "options": [
+                                        {"text": "Yes"},
+                                        {"text": "No"}
+                                    ]
+                                }
+                            ]
+                        }
+                        json_parameters["job_category"] = category
+                        json_parameters["category_predicted"] = "single"
+                        return await self.webhook_response(None, payload_response, json_parameters)
 
                 # Case 2: Gemini verification suggests a different category and verification_status_by_gemini is incorrect
                 elif verification_status_by_gemini == 'incorrect' and suggested_by_gemini and suggested_by_gemini != 'None':
                     
-                    response_message = (
-                        f"We recommend posting your job under the *{suggested_by_gemini}* category. "
-                        "Please confirm if this is correct."
-                    )
+                    if(json_parameters["job_type"] != 'None'):
+                        if(json_parameters["job_type"] == 'post_job'):
+                            response_message = (
+                                f"We recommend posting your job under the *'{suggested_by_gemini}'* category. "
+                                "Please confirm if this is correct."
+                            )
+                        
+                        if(json_parameters["job_type"] == 'find_job'):
+                            response_message = (
+                                f"We recommend finding your job under the *'{suggested_by_gemini}'* category. "
+                                "Please confirm if this is correct."
+                            )
 
                     payload_response = {
                         "richContent": [
@@ -387,7 +468,6 @@ class DialogflowController:
         except Exception as e:
             print(f"Error processing job data: {e}")
             return {"message": "Error processing job data.", "status": 500}
-
 
     async def confirm_category(self, job_description, confirmed_category):
         """
@@ -692,6 +772,283 @@ class DialogflowController:
             print(f"Error saving job data: {e}")
             return {"error": "Failed to save job data"}
 
+    async def find_job_data_list(self, parameters, error_text=None, json_parameters=None):
+        """
+        Search parameters for job finding.
+
+        Args:
+            parameters (dict): The parameters from Dialogflow.
+            error_text (str, optional): Error text to display if needed.
+            json_parameters (dict, optional): Additional JSON parameters to pass.
+
+        Returns:
+            dict: WhatsApp interactive list message content.
+        """
+        try:
+            job_category = parameters.get("job_category", None)
+            job_date = parameters.get("date", {})
+            job_time = parameters.get("time", {})
+            job_zip_code = parameters.get("zip_code", None)
+            amount = parameters.get("amount", {})
+
+            job_category_id = None
+
+            # Get the category ID if a job category is provided
+            if job_category:
+                category = await CategoryRepository.get_category_by_name(job_category)
+                if category:
+                    job_category_id = category.id
+
+            # Construct conditions
+            conditions = {
+                **({"category_id": job_category_id} if job_category_id else {}),
+                **({"amount": {"gte": amount.get('amount')}} if amount and amount.get('amount') else {}),
+                **({"zip_code": job_zip_code} if job_zip_code else {}),
+                **({"status": "posted"}),
+                **({"payment_status": "authorized"})
+            }
+
+            # Handle date and time filtering
+            if job_date:
+                year = int(job_date.get('year', 0))
+                month = int(job_date.get('month', 0))
+                day = int(job_date.get('day', 0))
+                hour = int(job_time.get('hours', 0)) if job_time else 0
+                minute = int(job_time.get('minutes', 0)) if job_time else 0
+                second = int(job_time.get('seconds', 0)) if job_time else 0
+
+                if year and month and day:  # Ensure year, month, and day are present
+                    formatted_utc_date_time = datetime.datetime(
+                        year=year,
+                        month=month,
+                        day=day,
+                        hour=hour,
+                        minute=minute,
+                        second=second
+                    )
+                    conditions["date_time"] = {"gte": formatted_utc_date_time}
+
+            # Sort order and limit
+            order = [("amount", "desc"), ("date_time", "asc")]
+
+            isFoundJobs = 'No'
+
+            # Find jobs
+            found_jobs = await JobRepository.find_all_jobs_with_conditions(conditions, order, limit=5)
+            if found_jobs:
+                isFoundJobs = 'Yes'
+                if error_text:
+                    summary_text = (
+                        f"⚠️ {error_text} ⚠️\n\n"
+                    )
+                else:
+                    summary_text = (
+                        f"✨ *Here are the jobs matching your criteria:* ✨\n\n"
+                    )
+                # Dynamically create options for each job
+                options = []
+                for idx, job in enumerate(found_jobs, 1):
+                    job_time_str = job.date_time.strftime("%m/%d/%Y @ %I:%M %p")
+                    job_title =  f"Job #{str(job.id)}"
+                    job_id = str(job.id)
+                    options.append({"text": job_title, "id": job_id})
+                    summary_text += (
+                        f"*{idx}) Category: {job.category.name.capitalize()} - {job_time_str} in {job.zip_code} - ${job.amount:.2f} (Job #{job.id})*\n"
+                        f"Job Requirement: {job.job_description}\n\n"
+                    )
+                summary_text += "Which job do you want to accept?"
+
+                payload_response = {
+                    "richContent": [
+                        {
+                            "text": summary_text
+                        },
+                        {
+                            "type": "chips",
+                            "options": options
+                        }
+                    ]
+                }
+
+                if not json_parameters:
+                    json_parameters = {}
+                json_parameters["is_found_jobs"] = isFoundJobs
+
+                return await self.webhook_response(None, payload_response, json_parameters)
+
+            else:
+                summary_text = "Unfortunately, we currently do not have any jobs that match the criteria entered. Please adjust your criteria."
+                if not json_parameters:
+                    json_parameters = {}
+                json_parameters["is_found_jobs"] = isFoundJobs
+                return await self.webhook_response(summary_text, None, json_parameters)
+
+        except Exception as e:
+            print(f"Error finding job data: {e}")
+            return {"error": "Failed to find job data"}
+
+    async def found_jobs_selected_id(self, parameters, recipient_number):
+        """
+        Search parameters for job finding.
+
+        Args:
+            parameters (dict): The parameters from Dialogflow.
+            recipient_number (str): The phone number of the recipient.
+
+        Returns:
+            dict: WhatsApp interactive list message content.
+        """
+        try:
+            selected_job_id = parameters.get("selected_job_id", None)
+            
+            # Get the selected job by job ID
+            selected_job = await JobRepository.find_job_with_conditions({"id": selected_job_id})
+            if not selected_job:
+                return await self.find_job_data_list(
+                    parameters, 
+                    error_text="*Invalid selection.*\n*Please choose a valid job from the list:*",
+                    json_parameters={"selected_own_job_id": "No", "selected_same_time_job_id": "No", "selected_job_id_is_valid": "No"}
+                )
+
+            # Get user by phone number
+            user = await UserRepository.get_user_by_phone_number(recipient_number)
+            if not user:
+                 print({"error": "User not found"})
+
+            if selected_job.posted_by != user.id:
+                # Check if the user already accepted jobs at the same time
+                same_time_job_exist = await JobRepository.find_job_with_conditions({
+                    "date_time": selected_job.date_time,
+                    "accepted_by": user.id
+                })
+
+                if same_time_job_exist:
+                    return await self.find_job_data_list(
+                        parameters, 
+                        error_text="*You already accepted jobs at the same time.*\n*Please choose a different job from the list:*",
+                        json_parameters={"selected_own_job_id": "No", "selected_same_time_job_id": "Yes", "selected_job_id_is_valid": "Yes"}
+                    )
+
+                # Prepare the job details
+                selected_job_date_str = selected_job.date_time.strftime("%m/%d/%Y")
+                selected_job_time_str = selected_job.date_time.strftime("%I:%M %p")
+
+                json_parameters = {
+                    "selected_own_job_id": "No",
+                    "selected_same_time_job_id": "No",
+                    "selected_job_id_is_valid": "Yes"
+                }
+
+                # Create a response message
+                response_message = (
+                    f"✨ *Great! Please confirm you want to accept this job:* ✨\n\n"
+                    f"  🔹 *Job Category:* {selected_job.category.name.capitalize()}\n"
+                    f"  🔹 *Date:* {selected_job_date_str}\n"
+                    f"  🔹 *Time:* {selected_job_time_str}\n"
+                    f"  🔹 *Location:* {selected_job.zip_code}\n"
+                    f"  🔹 *Amount:* ${selected_job.amount:.2f}\n"
+                    f"  🔹 *Requirement:* {selected_job.job_description}\n\n"
+                    f"Please respond with: *Accept* to confirm, *Decline* to cancel and return to the main menu\n"
+                )
+
+                payload_response = {
+                    "richContent": [
+                        {
+                            "text": response_message
+                        },
+                        {
+                            "type": "chips",
+                            "options": [
+                                {"text": "Accept"},
+                                {"text": "Decline"}
+                            ]
+                        }
+                    ]
+                }
+                return await self.webhook_response(None, payload_response, json_parameters)
+
+            else:
+                return await self.find_job_data_list(
+                    parameters, 
+                    error_text="*This is your job and you can't select it.*\n*Please choose a different job from the list:*",
+                    json_parameters={"selected_own_job_id": "Yes", "selected_same_time_job_id": "No", "selected_job_id_is_valid": "Yes"}
+                )
+
+        except Exception as e:
+            print(f"Error finding job data: {e}")
+            return {"error": "Failed to find job data"}
+
+    async def assign_user_to_accepted_job(self, parameters, recipient_number):
+        """
+        Assign a user to an accepted job based on the provided parameters.
+
+        Args:
+            parameters (dict): The parameters from Dialogflow.
+            recipient_number (str): The phone number of the recipient.
+
+        Returns:
+            dict: WhatsApp interactive list message content.
+        """
+        try:
+            selected_job_id = parameters.get("selected_job_id")
+            
+            # Get the selected job by job ID
+            selected_job = await JobRepository.find_job_with_conditions({"id": selected_job_id})
+            if not selected_job:
+                return await self.find_job_data_list(
+                    parameters,
+                    error_text="*Invalid selection.*\n*Please choose a valid job from the list:*",
+                    json_parameters={"selected_own_job_id": "No", "selected_same_time_job_id": "No", "selected_job_id_is_valid": "No"}
+                )
+
+            # Check if the job is already accepted or not in 'Posted' status
+            if selected_job.accepted_by or selected_job.status.lower() != "posted":
+                return await self.find_job_data_list(
+                    parameters,
+                    error_text="*This job is no longer available for acceptance. Please choose another job.*",
+                    json_parameters={"selected_own_job_id": "No", "selected_same_time_job_id": "No", "selected_job_id_is_valid": "No"}
+                )
+            
+            # Get user by phone number
+            user = await UserRepository.get_user_by_phone_number(recipient_number)
+            if not user:
+                 print({"error": "User not found"})
+
+            # Fetch the full address data from the Address table
+            address = await AddressRepository.get_address_by_id(selected_job.address_id)
+            if not address:
+                print({"error": "Address not found"})
+
+            # Update the job status to accepted
+            update_job_data = {
+                'status': 'accepted',
+                'accepted_by': user.id
+            }
+            where_criteria = {"id": selected_job_id}
+            await JobRepository.update_job(where_criteria, update_job_data)
+
+            # Format the job details
+            selected_job_date_str = selected_job.date_time.strftime("%m/%d/%Y")
+            selected_job_time_str = selected_job.date_time.strftime("%I:%M %p")
+
+            # Format the full address
+            full_address = f"{address.street}, {address.city}, {address.state} {address.zip_code}"
+
+            # Create the response message
+            response_message = (
+                f"✨ *Great! You've successfully accepted the job!* ✨\n\n"
+                f"We'll see you at *{full_address}* on *{selected_job_date_str}* at *{selected_job_time_str}*.\n"
+                f"You'll receive *${selected_job.amount:.2f}* after completing this job.\n\n"
+                f"*Job Details:* {selected_job.job_description}\n"
+            )
+
+            return await self.webhook_response(response_message, None, None)
+
+        except Exception as e:
+            print(f"Error in assign user to accepted job: {e}")
+            return {"error": "An error occurred while processing the job data."}
+
+
     async def get_job_category(self, service_description):
         """
         Predict the job category using the ML model.
@@ -702,6 +1059,15 @@ class DialogflowController:
         Returns:
             dict: The response from the ML model with category suggestions.
         """
+
+        # Phrases to be removed from the service description
+        post_job_phrases = ["post job", "post a job", "post new job", "post another job"]
+        find_job_phrases = ["find job", "find a job", "find new job", "find another job"]
+
+        # Clean the service description by removing unwanted phrases
+        for phrase in post_job_phrases + find_job_phrases:
+            service_description = service_description.replace(phrase, "").strip()
+
         headers = {
             'Content-Type': 'application/json',
             'Authorization': f'Bearer {CLASSIFICATION_MODEL_API_KEY}'

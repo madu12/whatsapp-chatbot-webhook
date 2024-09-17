@@ -20,6 +20,7 @@ class User(Base):
     chat_sessions = relationship('ChatSession', back_populates='user')
     
     addresses = relationship('Address', back_populates='user')
+
 class Category(Base):
     __tablename__ = 'categories'
     id = Column(Integer, primary_key=True, autoincrement=True)

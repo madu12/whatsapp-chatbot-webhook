@@ -114,7 +114,7 @@ async def order_success():
         address_data = {
             "street": f"{customer_address.line1} {customer_address.line2 if customer_address.line2 else ''}",
             "city": customer_address.city,
-            "postal_code": customer_address.postal_code,
+            "zip_code": customer_address.postal_code,
             "state": customer_address.state,
             "country": customer_address.country
         }
@@ -124,6 +124,7 @@ async def order_success():
         address_id = result['address_data'].id if result['address_data'] else None
 
         update_job_data = {
+            'status': 'posted',
             'payment_status': 'authorized',
             'payment_intent': session.payment_intent,
             'address_id': address_id

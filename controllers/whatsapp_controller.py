@@ -38,7 +38,7 @@ class WhatsAppController:
                 await self.welcome_msg(recipient_number, recipient_name)
                 return
 
-            if any(phrase in recipient_message.lower() for phrase in post_job_phrases + find_job_phrases):
+            if recipient_message.lower() in post_job_phrases + find_job_phrases:
                 await self.handle_job_action(recipient_number, recipient_message, user, post_job_phrases, find_job_phrases)
             else:
                 await self.handle_continued_conversation(recipient_number, recipient_message, user)
@@ -112,19 +112,31 @@ class WhatsAppController:
             dialogflow_response (dict): The response from Dialogflow.
         """
         try:
+            # Check for an error in the Dialogflow response
             if "error" in dialogflow_response:
-                response_message = "Something went wrong please try again"
-                await self.whatsapp_client.send_whatsapp_message(recipient_number, response_message)
+                response_message = "Something went wrong, please try again."
+                await self.whatsapp_client.send_whatsapp_message(recipient_number, response_message, 'text')
             else:
+                # Handle button response
                 if 'replyBtnMessage' in dialogflow_response and dialogflow_response['replyBtnMessage'] is not None:
                     await self.whatsapp_client.send_whatsapp_message(recipient_number, dialogflow_response['replyBtnMessage'], 'interactive')
+                
+                # Handle list response
+                elif 'replyListMessage' in dialogflow_response and dialogflow_response['replyListMessage'] is not None:
+                    await self.whatsapp_client.send_whatsapp_message(recipient_number, dialogflow_response['replyListMessage'], 'interactive')
+
+                # Handle simple text response
                 elif 'simpleTextMessage' in dialogflow_response and dialogflow_response['simpleTextMessage'] is not None:
                     await self.whatsapp_client.send_whatsapp_message(recipient_number, dialogflow_response['simpleTextMessage'], 'text')
+
+                # Handle default options if no recognizable response
                 else:
                     await self.send_default_options(recipient_number)
+
         except Exception as e:
             print(f"Error processing Dialogflow response: {e}")
             await self.send_error_message(recipient_number)
+
 
     async def send_default_options(self, recipient_number):
         """
@@ -194,14 +206,23 @@ class WhatsAppController:
                 recipient_message = message["text"]["body"]
                 await self.process_text_message(recipient_number, recipient_name, recipient_message)
             elif message["type"] == "interactive":
-                interactive_message = message["interactive"]["button_reply"]["id"]
-                await self.process_text_message(recipient_number, recipient_name, interactive_message)
+                interactive_type = message['interactive']['type']
+
+                # If the message is a button reply
+                if interactive_type == 'button_reply':
+                    interactive_message = message["interactive"]["button_reply"]["id"]
+                    await self.process_text_message(recipient_number, recipient_name, interactive_message)
+                elif interactive_type == 'list_reply':
+                    interactive_message = message["interactive"]["list_reply"]["id"]
+                    await self.process_text_message(recipient_number, recipient_name, interactive_message)
             else:
                 response_message = 'This chatbot only supports text and interactive messages.'
                 await self.whatsapp_client.send_whatsapp_message(recipient_number, response_message)
 
             return {"status": "ok"}
         except Exception as e:
+            response_message = 'This chatbot only supports text and interactive messages.'
+            await self.whatsapp_client.send_whatsapp_message(recipient_number, response_message)
             print(f"Error handling WhatsApp message: {e}")
             return {"status": "error", "message": str(e)}
 

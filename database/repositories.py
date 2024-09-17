@@ -1,6 +1,6 @@
 import datetime
-from sqlalchemy import and_
-from sqlalchemy.orm import Session
+from sqlalchemy import asc, desc, select
+from sqlalchemy.orm import joinedload
 from database.models import User, Job, Category, ChatSession, Address
 from database.db_session import create_session
 from sqlalchemy.exc import SQLAlchemyError
@@ -49,7 +49,6 @@ class UserRepository:
             print(f"Error creating user: {e}")
             session.rollback()
             return None
-
 
 class ChatSessionRepository:
     @staticmethod
@@ -119,7 +118,6 @@ class ChatSessionRepository:
             session.rollback()
             return None
 
-
 class CategoryRepository:
     @staticmethod
     async def get_category_by_name(category_name):
@@ -138,7 +136,6 @@ class CategoryRepository:
         except SQLAlchemyError as e:
             print(f"Error retrieving category by name: {e}")
             return None
-
 
 class JobRepository:
     @staticmethod
@@ -250,6 +247,82 @@ class JobRepository:
             session.rollback()
             return None
 
+    @staticmethod
+    async def find_all_jobs_with_conditions(conditions, order, limit=5):
+        """
+        Find all jobs based on conditions.
+
+        Args:
+            conditions (dict): A dictionary specifying the filter conditions.
+            order (list of tuples): A list of tuples specifying the ordering.
+                Each tuple contains (column_name, "asc" or "desc").
+            limit (int): The maximum number of jobs to return.
+
+        Returns:
+            List[Job]: A list of job objects matching the conditions.
+        """
+        try:
+            session = create_session()
+            query = session.query(Job).options(joinedload(Job.category))  
+            
+            # Apply filter conditions
+            for key, value in conditions.items():
+                if isinstance(value, dict):  # Handle different types of conditions
+                    if "gte" in value:
+                        query = query.filter(getattr(Job, key) >= value["gte"])
+                    elif "lte" in value:
+                        query = query.filter(getattr(Job, key) <= value["lte"])
+                    elif "in" in value:
+                        query = query.filter(getattr(Job, key).in_(value["in"]))
+                    else:  # Default to equality if no specific operator is provided
+                        query = query.filter(getattr(Job, key) == value)
+                else:
+                    query = query.filter(getattr(Job, key) == value)
+
+            # Apply ordering
+            for column_name, direction in order:
+                column = getattr(Job, column_name)
+                if direction.lower() == "asc":
+                    query = query.order_by(asc(column))
+                elif direction.lower() == "desc":
+                    query = query.order_by(desc(column))
+
+            # Apply limit
+            found_jobs = query.limit(limit).all()
+            return found_jobs
+
+        except SQLAlchemyError as e:
+            print(f"Error finding jobs with conditions: {e}")
+            return None
+
+    @staticmethod
+    async def find_job_with_conditions(conditions):
+        """
+        Find a job based on conditions.
+
+        Args:
+            conditions (dict): A dictionary specifying the filter conditions.
+
+        Returns:
+            Job: A job object matching the conditions, or None if not found.
+        """
+        try:
+            session = create_session()
+            query = session.query(Job).options(
+                joinedload(Job.category)
+            )
+            # Apply filter conditions dynamically
+            for key, value in conditions.items():
+                query = query.filter(getattr(Job, key) == value)
+
+            job = query.first()
+            if not job:
+                return None
+            return job
+
+        except SQLAlchemyError as e:
+            print(f"Error finding job with conditions: {e}")
+            return None
 class AddressRepository:
     @staticmethod
     async def register_address(address_data, user_id):
@@ -290,3 +363,21 @@ class AddressRepository:
             print(f"Error registering user address: {e}")
             session.rollback()
             raise e
+    
+    @staticmethod
+    async def get_address_by_id(address_id):
+        """
+        Retrieve the address details by address ID.
+
+        Args:
+            address_id (int): The ID of the address to retrieve.
+
+        Returns:
+            Address: An Address object containing the details of the address or None if not found.
+        """
+        try:
+            session = create_session()
+            return session.query(Address).filter_by(id=address_id).first()
+        except SQLAlchemyError as e:
+            print(f"Error retrieving address by ID: {e}")
+            return None
