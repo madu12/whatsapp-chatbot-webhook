@@ -1048,7 +1048,6 @@ class DialogflowController:
             print(f"Error in assign user to accepted job: {e}")
             return {"error": "An error occurred while processing the job data."}
 
-
     async def get_job_category(self, service_description):
         """
         Predict the job category using the ML model.

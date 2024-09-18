@@ -1,7 +1,7 @@
 import uuid
 from clients.whatsapp_client import WhatsAppClient
 from controllers.dialogflow_controller import DialogflowController
-from database.repositories import UserRepository, ChatSessionRepository
+from database.repositories import JobRepository, UserRepository, ChatSessionRepository
 
 class WhatsAppController:
     def __init__(self):
@@ -32,6 +32,10 @@ class WhatsAppController:
 
             if recipient_message.lower() == "help":
                 await self.send_help_message(recipient_number)
+                return
+            
+            if recipient_message.lower() == "my jobs":
+                await self.job_list(recipient_number)
                 return
             
             if recipient_message.lower() == "hi":
@@ -137,7 +141,6 @@ class WhatsAppController:
             print(f"Error processing Dialogflow response: {e}")
             await self.send_error_message(recipient_number)
 
-
     async def send_default_options(self, recipient_number):
         """
         Send the default options (Post Job or Find Job) to the user.
@@ -221,7 +224,7 @@ class WhatsAppController:
 
             return {"status": "ok"}
         except Exception as e:
-            response_message = 'This chatbot only supports text and interactive messages.'
+            response_message = e
             await self.whatsapp_client.send_whatsapp_message(recipient_number, response_message)
             print(f"Error handling WhatsApp message: {e}")
             return {"status": "error", "message": str(e)}
@@ -317,7 +320,6 @@ class WhatsAppController:
                 "📋 *Help Guide*\n\n"
                 "   🔹 *Post Job:* Type 'Post Job' to start posting a new job.\n\n"
                 "   🔹 *Find Job:* Type 'Find Job' to search for available jobs.\n\n"
-                "   🔹 *Check Status:* Type 'Check Status' to view the status of your jobs.\n\n"
                 "   🔹 *My Jobs:* Type 'My Jobs' to see a list of jobs you have posted or accepted.\n\n"
             )
             await self.whatsapp_client.send_whatsapp_message(recipient_number, help_message, 'text')
@@ -369,4 +371,59 @@ class WhatsAppController:
             await self.whatsapp_client.send_whatsapp_message(session.metadata.recipient_number, response_message)
         except Exception as e:
             print(f"Error generating payment success message: {e}")
+
+    async def job_list(self, recipient_number):
+        """
+        Send a message listing the jobs posted or accepted by the user.
+
+        Args:
+            recipient_number (str): The phone number of the recipient.
+        """
+        try:
+            # Fetch the user based on their phone number
+            user = await UserRepository.get_user_by_phone_number(recipient_number)
+            if user:
+                order = [("id", "asc")]
+                
+                # Fetch jobs posted by the user
+                posted_jobs = await JobRepository.find_all_jobs_with_conditions({
+                    "posted_by": user.id
+                }, order, 10)
+
+                # Fetch jobs accepted by the user
+                accepted_jobs = await JobRepository.find_all_jobs_with_conditions({
+                    "accepted_by": user.id
+                }, order, 10)
+
+                # Construct the response message
+                response_message = ""
+
+                def format_job_details(job):
+                    job_time_str = job.date_time.strftime('%m/%d/%Y @ %I:%M %p')  # Format job time
+                    return f"*Job ID #{job.id}:* - {job.category.name.capitalize()} on {job_time_str} in {job.zip_code} for ${job.amount:.2f} - {job.status.capitalize()}"
+
+                # Check and list posted jobs
+                if posted_jobs:
+                    response_message += "🌟 *Your Posted Jobs:*\n\n"
+                    for job in posted_jobs:
+                        response_message += f"📌 {format_job_details(job)}\n\n"
+
+                # Check and list accepted jobs
+                if accepted_jobs:
+                    response_message += "👍 *Your Accepted Jobs:*\n\n"
+                    for job in accepted_jobs:
+                        response_message += f"📌 {format_job_details(job)}\n\n"
+
+                # If no jobs were found, provide a different response
+                if not posted_jobs and not accepted_jobs:
+                    response_message = "🚫 You have no jobs posted or accepted."
+
+                # Send the response via WhatsApp
+                await self.whatsapp_client.send_whatsapp_message(recipient_number, response_message)
+            else:
+                await self.whatsapp_client.send_whatsapp_message(recipient_number, "User not found.")
+
+        except Exception as e:
+            print(f"Error finding jobs for user: {e}")
+            await self.send_error_message(recipient_number)
 
