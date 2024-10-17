@@ -1119,7 +1119,7 @@ class DialogflowController:
             
             # Fetch jobs posted by the user that can be marked as complete (status: posted)
             posted_jobs = await JobRepository.find_all_jobs_with_conditions({
-                "status": 'posted',
+                "status": 'accepted',
                 "posted_by": user.id,
                 "accepted_by": {"not_null": True},  
             }, order, 10)
