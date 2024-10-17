@@ -29,7 +29,7 @@ class DialogflowController:
         Returns:
             dict: The processed response from Dialogflow.
         """
-        response = await self.dialogflow_client.detect_intent(sender_message, recipient_number, chat_session_id)
+        response = await self.dialogflow_client.detect_intent(sender_message, recipient_number, chat_session_id) 
         if response:
             return await self.process_dialogflow_response(response.response_messages)
         else:
@@ -315,6 +315,10 @@ class DialogflowController:
                 
                 if tag == 'assignUserToAcceptedJob':
                     response = await self.assign_user_to_accepted_job(parameters, recipient_number)
+                    return response
+                
+                if tag == 'userJobList':
+                    response = await self.user_job_list(recipient_number)
                     return response
                 
                 
@@ -848,13 +852,13 @@ class DialogflowController:
                 # Dynamically create options for each job
                 options = []
                 for idx, job in enumerate(found_jobs, 1):
-                    job_time_str = job.date_time.strftime("%m/%d/%Y @ %I:%M %p")
+                    job_time_str = job.date_time.strftime("%m/%d/%Y at %I:%M %p")
                     job_title =  f"Job #{str(job.id)}"
                     job_id = str(job.id)
                     options.append({"text": job_title, "id": job_id})
                     summary_text += (
-                        f"*{idx}) Category: {job.category.name.capitalize()} - {job_time_str} in {job.zip_code} - ${job.amount:.2f} (Job #{job.id})*\n"
-                        f"Job Requirement: {job.job_description}\n\n"
+                        f"*{idx}) Job ID #{job.id}:* {job.category.name.capitalize()} on {job_time_str} in ZIP {job.zip_code} for ${job.amount:.2f}\n"
+                        f"*Job Requirement:* {job.job_description}\n\n"
                     )
                 summary_text += "Which job do you want to accept?"
 
@@ -1122,3 +1126,92 @@ class DialogflowController:
         except requests.RequestException as e:
             print(f"Error validating zip code: {e}")
             return False, {}
+
+    async def user_job_list(self, recipient_number):
+            """
+            Send a message listing the jobs posted or accepted by the user.
+
+            Args:
+                recipient_number (str): The phone number of the recipient.
+            """
+            try:
+                # Fetch the user based on their phone number
+                user = await UserRepository.get_user_by_phone_number(recipient_number)
+                if user:
+                    order = [("id", "asc")]
+                    
+                    # Fetch jobs posted by the user
+                    posted_jobs = await JobRepository.find_all_jobs_with_conditions({
+                        "status": 'posted',
+                        "posted_by": user.id
+                    }, order, 10)
+
+                    # Fetch jobs accepted by the user
+                    accepted_jobs = await JobRepository.find_all_jobs_with_conditions({
+                        "status": 'accepted',
+                        "accepted_by": user.id
+                    }, order, 10)
+
+                    # Construct the response message
+                    summary_text = (
+                        f"✨ *Here are the jobs to mark as complete:* ✨\n\n"
+                    )
+
+                    options = []
+
+                    # Check and list posted jobs
+                    if posted_jobs:
+                        summary_text += "🌟 *Your Posted Jobs:*\n\n"
+                        for idx, job in enumerate(posted_jobs, 1):
+                            job_time_str = job.date_time.strftime("%m/%d/%Y at %I:%M %p")
+                            job_title =  f"Job #{str(job.id)}"
+                            job_id = str(job.id)
+                            options.append({"text": job_title, "id": job_id})
+                            summary_text += (
+                                f"*{idx}) Job ID #{job.id}:* {job.category.name.capitalize()} on {job_time_str} in ZIP {job.zip_code} for ${job.amount:.2f}\n\n"
+                            )
+
+                    # Check and list accepted jobs
+                    if accepted_jobs:
+                        summary_text += "👍 *Your Accepted Jobs:*\n\n"
+                        for idx, job in enumerate(accepted_jobs, 1):
+                            job_time_str = job.date_time.strftime("%m/%d/%Y at %I:%M %p")
+                            job_title =  f"Job #{str(job.id)}"
+                            job_id = str(job.id)
+                            options.append({"text": job_title, "id": job_id})
+                            summary_text += (
+                                f"*{idx}) Job ID #{job.id}:* {job.category.name.capitalize()} on {job_time_str} in ZIP {job.zip_code} for ${job.amount:.2f}\n\n"
+                            )
+
+                    # If jobs were found
+                    if posted_jobs or accepted_jobs:
+                        summary_text += "Which job do you want to mark as complete?\n"
+                        payload_response = {
+                            "richContent": [
+                                {
+                                    "text": summary_text
+                                },
+                                {
+                                    "type": "chips",
+                                    "options": options
+                                }
+                            ]
+                        }
+                        
+                        # Send the response to Webhook
+                        return await self.webhook_response(None, payload_response, None)
+
+                    # If no jobs were found, provide a different response
+                    if not posted_jobs and not accepted_jobs:
+                        response_message = "🚫 You have no jobs posted or accepted."
+
+                        # Send the response to Webhook
+                        return await self.webhook_response(response_message, None, None)
+                else:
+                    # Send the response to Webhook
+                    return await self.webhook_response("User not found.", None, None)
+
+            except Exception as e:
+                print(f"Error finding jobs for user: {e}")
+                await self.send_error_message(recipient_number)
+

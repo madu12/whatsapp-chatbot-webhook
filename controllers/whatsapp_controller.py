@@ -24,6 +24,7 @@ class WhatsAppController:
         try:
             post_job_phrases = ["post job", "post a job", "post new job", "post another job"]
             find_job_phrases = ["find job", "find a job", "find new job", "find another job"]
+            mark_complete_phrases = ["complete job", "mark as complete", "job complete", "done with job"]
 
             user = await UserRepository.get_user_by_phone_number(recipient_number)
             if not user:
@@ -42,17 +43,17 @@ class WhatsAppController:
                 await self.welcome_msg(recipient_number, recipient_name)
                 return
 
-            if recipient_message.lower() in post_job_phrases + find_job_phrases:
-                await self.handle_job_action(recipient_number, recipient_message, user, post_job_phrases, find_job_phrases)
+            if recipient_message.lower() in post_job_phrases + find_job_phrases + mark_complete_phrases:
+                await self.handle_job_action(recipient_number, recipient_message, user, post_job_phrases, find_job_phrases, mark_complete_phrases)
             else:
                 await self.handle_continued_conversation(recipient_number, recipient_message, user)
         except Exception as e:
             print(f"Error processing text message: {e}")
             await self.send_error_message(recipient_number)
 
-    async def handle_job_action(self, recipient_number, recipient_message, user, post_job_phrases, find_job_phrases):
+    async def handle_job_action(self, recipient_number, recipient_message, user, post_job_phrases, find_job_phrases, mark_complete_phrases):
         """
-        Handle the job-related actions (post job or find job).
+        Handle the job-related actions (post job, find job, or mark job as complete).
 
         Args:
             recipient_number (str): The phone number of the recipient.
@@ -60,6 +61,7 @@ class WhatsAppController:
             user (User): The user object retrieved from the database.
             post_job_phrases (list): List of phrases indicating a post job action.
             find_job_phrases (list): List of phrases indicating a find job action.
+            mark_complete_phrases (list): List of phrases indicating a mark job as complete action.
         """
         try:
             chat_session_id = str(uuid.uuid4())
@@ -71,10 +73,13 @@ class WhatsAppController:
             elif any(phrase in recipient_message.lower() for phrase in find_job_phrases):
                 recipient_message = "Find Job"
                 await ChatSessionRepository.create_chat_session(chat_session_id, recipient_message, user.id)
+            elif any(phrase in recipient_message.lower() for phrase in mark_complete_phrases):
+                recipient_message = "Mark as Complete"
+                await ChatSessionRepository.create_chat_session(chat_session_id, recipient_message, user.id)
 
             dialogflow_response = await self.dialogflow_controller.handle_message(recipient_message, recipient_number, chat_session_id)
             if dialogflow_response:
-                await self.whatsapp_client.send_whatsapp_message(recipient_number, dialogflow_response['simpleTextMessage'], 'text')
+                await self.process_dialogflow_response(recipient_number, dialogflow_response)
             else:
                 await self.send_default_options(recipient_number)
         except Exception as e:
@@ -163,13 +168,21 @@ class WhatsAppController:
                         "id": "Find Job",
                         "title": "Find Job"
                     }
-                }
+                },
+                    {
+                        "type": "reply",
+                        "reply": {
+                            "id": "Mark as Complete",
+                            "title": "Mark as Complete"
+                        }
+                    }
             ]
             response_message = (
                 f"*We encountered an issue processing your request.*\n\n"
                 f"Please try one of the following options:\n"
                 f'1️⃣ Post Job: Type "Post Job" to start posting a new job.\n'
-                f'2️⃣ Find Job: Type "Find Job" to search for available jobs.\n\n'
+                f'2️⃣ Find Job: Type "Find Job" to search for available jobs.\n'
+                f'3️⃣ Mark as Complete: Type "Mark as Complete" to update the job status to complete.\n\n'
                 f"If you need any assistance, just type 'help'. 💬"
             )
             interactive_message = await self.dialogflow_controller.create_button_message(response_message, buttons)
@@ -220,12 +233,12 @@ class WhatsAppController:
                     await self.process_text_message(recipient_number, recipient_name, interactive_message)
             else:
                 response_message = 'This chatbot only supports text and interactive messages.'
-                await self.whatsapp_client.send_whatsapp_message(recipient_number, response_message)
+                await self.whatsapp_client.send_whatsapp_message(recipient_number, response_message, 'text')
 
             return {"status": "ok"}
         except Exception as e:
             response_message = e
-            await self.whatsapp_client.send_whatsapp_message(recipient_number, response_message)
+            await self.whatsapp_client.send_whatsapp_message(recipient_number, response_message, 'text')
             print(f"Error handling WhatsApp message: {e}")
             return {"status": "error", "message": str(e)}
 
@@ -252,13 +265,21 @@ class WhatsAppController:
                         "id": "Find Job",
                         "title": "Find Job"
                     }
+                },
+                {
+                    "type": "reply",
+                    "reply": {
+                        "id": "Mark as Complete",
+                        "title": "Mark as Complete"
+                    }
                 }
             ]
             response_message = (
                 f"Hello, {recipient_name}! This is HOME SERVICE CHATBOT! 🏠🤖\n\n"
                 f"✨ What would you like to do today?\n"
                 f"1️⃣ Post Job\n"
-                f"2️⃣ Find Job\n\n"
+                f"2️⃣ Find Job\n"
+                f"3️⃣ Mark as Complete\n\n"
                 f"If you need any assistance, just type 'help'. 💬"
             )
             interactive_message = await self.dialogflow_controller.create_button_message(response_message, buttons)
@@ -292,6 +313,13 @@ class WhatsAppController:
                             "id": "Find Job",
                             "title": "Find Job"
                         }
+                    },
+                    {
+                        "type": "reply",
+                        "reply": {
+                            "id": "Mark as Complete",
+                            "title": "Mark as Complete"
+                        }
                     }
                 ]
                 response_message = (
@@ -299,7 +327,8 @@ class WhatsAppController:
                     f"Welcome, {recipient_name}! You have been successfully registered in our system. 🎉\n\n"
                     f"✨ What would you like to do next?\n"
                     f"1️⃣ Post Job\n"
-                    f"2️⃣ Find Job\n\n"
+                    f"2️⃣ Find Job\n"
+                    f"3️⃣ Mark as Complete\n\n"
                     f"If you need any assistance, just type 'help'. 💬"
                 )
                 interactive_message = await self.dialogflow_controller.create_button_message(response_message, buttons)
@@ -336,7 +365,7 @@ class WhatsAppController:
         """
         try:
             response_message = "We encountered an issue processing your request. Please try again later."
-            await self.whatsapp_client.send_whatsapp_message(recipient_number, response_message)
+            await self.whatsapp_client.send_whatsapp_message(recipient_number, response_message, 'text')
         except Exception as e:
             print(f"Error sending error message: {e}")
 
@@ -368,7 +397,7 @@ class WhatsAppController:
                 f"Please proceed with the escrow payment to complete the posting.\n\n"
                 f"*Note:* The address entered in Stripe will be used as the job location address.\n"
             )
-            await self.whatsapp_client.send_whatsapp_message(session.metadata.recipient_number, response_message)
+            await self.whatsapp_client.send_whatsapp_message(session.metadata.recipient_number, response_message, 'text')
         except Exception as e:
             print(f"Error generating payment success message: {e}")
 
@@ -396,32 +425,36 @@ class WhatsAppController:
                 }, order, 10)
 
                 # Construct the response message
-                response_message = ""
-
-                def format_job_details(job):
-                    job_time_str = job.date_time.strftime('%m/%d/%Y @ %I:%M %p')  # Format job time
-                    return f"*Job ID #{job.id}:* - {job.category.name.capitalize()} on {job_time_str} in {job.zip_code} for ${job.amount:.2f} - {job.status.capitalize()}"
+                response_message = (
+                    f"✨ *Here are your jobs:* ✨\n\n"
+                )
 
                 # Check and list posted jobs
                 if posted_jobs:
                     response_message += "🌟 *Your Posted Jobs:*\n\n"
-                    for job in posted_jobs:
-                        response_message += f"📌 {format_job_details(job)}\n\n"
+                    for idx, job in enumerate(posted_jobs, 1):
+                        job_time_str = job.date_time.strftime("%m/%d/%Y at %I:%M %p")
+                        response_message += (
+                            f"*{idx}) Job ID #{job.id}:* {job.category.name.capitalize()} on {job_time_str} in ZIP {job.zip_code} for ${job.amount:.2f} - {job.status.capitalize()}\n\n"
+                        )
 
                 # Check and list accepted jobs
                 if accepted_jobs:
                     response_message += "👍 *Your Accepted Jobs:*\n\n"
-                    for job in accepted_jobs:
-                        response_message += f"📌 {format_job_details(job)}\n\n"
+                    for idx, job in enumerate(accepted_jobs, 1):
+                        job_time_str = job.date_time.strftime("%m/%d/%Y at %I:%M %p")
+                        response_message += (
+                            f"*{idx}) Job ID #{job.id}:* {job.category.name.capitalize()} on {job_time_str} in ZIP {job.zip_code} for ${job.amount:.2f} - {job.status.capitalize()}\n\n"
+                        )
 
                 # If no jobs were found, provide a different response
                 if not posted_jobs and not accepted_jobs:
                     response_message = "🚫 You have no jobs posted or accepted."
 
                 # Send the response via WhatsApp
-                await self.whatsapp_client.send_whatsapp_message(recipient_number, response_message)
+                await self.whatsapp_client.send_whatsapp_message(recipient_number, response_message, 'text')
             else:
-                await self.whatsapp_client.send_whatsapp_message(recipient_number, "User not found.")
+                await self.whatsapp_client.send_whatsapp_message(recipient_number, "User not found.", 'text')
 
         except Exception as e:
             print(f"Error finding jobs for user: {e}")
