@@ -1,5 +1,6 @@
 from clients.dialogflow_client import DialogflowClient
 import datetime
+from clients.whatsapp_client import WhatsAppClient
 from database.repositories import AddressRepository, ChatSessionRepository, JobRepository, CategoryRepository, UserRepository
 from clients.stripe_client import StripeClient
 import requests
@@ -11,8 +12,9 @@ import logging
 class DialogflowController:
     def __init__(self):
         """
-        Initialize the DialogflowController with the necessary clients.
+        Initialize the DialogflowController with necessary clients.
         """
+        self.whatsapp_client = WhatsAppClient()
         self.dialogflow_client = DialogflowClient()
         self.stripe_client = StripeClient()
         self.api_key = GOOGLE_MAPS_API_KEY
@@ -29,11 +31,17 @@ class DialogflowController:
         Returns:
             dict: The processed response from Dialogflow.
         """
-        response = await self.dialogflow_client.detect_intent(sender_message, recipient_number, chat_session_id) 
-        if response:
-            return await self.process_dialogflow_response(response.response_messages)
-        else:
-            return {"error": "Failed to detect intent"}
+        try:
+            # Detect the intent using Dialogflow
+            response = await self.dialogflow_client.detect_intent(sender_message, recipient_number, chat_session_id)
+            if response:
+                # Process the response messages from Dialogflow
+                return await self.process_dialogflow_response(response.response_messages)
+            else:
+                return {"error": "Failed to detect intent"}
+        except Exception as e:
+            print(f"Error handling message: {e}")
+            return {"error": "Internal error processing message"}
 
     async def process_dialogflow_response(self, fulfillment_messages):
         """
@@ -57,11 +65,9 @@ class DialogflowController:
             # Process payload messages for buttons and lists
             if payload_messages:
                 buttons, lists, payload_text = await self.process_payload_messages(payload_messages)
-
-                if not text_messages:
-                    payload_text_message = payload_text
-                else:
-                    payload_text_message = text_messages[0].text.text[0]
+ 
+                # Use the payload text if no text message exists
+                payload_text_message = text_messages[0].text.text[0] if text_messages else payload_text
 
                 # Create button message if buttons are found
                 if buttons:
@@ -71,11 +77,10 @@ class DialogflowController:
                 if lists:
                     reply_list_message = await self.create_list_message(payload_text_message, lists)
 
-            # Process simple text messages if no buttons or lists
+            # Process simple text messages if no buttons or lists are present
             if not reply_btn_message and not reply_list_message and text_messages:
                 simple_text_message = text_messages[0].text.text[0] if text_messages else None
 
-            # Return the structured message based on the type found
             return {
                 "replyBtnMessage": reply_btn_message,
                 "replyListMessage": reply_list_message,
@@ -106,33 +111,26 @@ class DialogflowController:
             for item in payload_richContent:
                 item_dict = dict(item)
 
+                # Extract the text from the payload
                 if 'text' in item_dict:
                     payload_text = item_dict['text']
+
+                # Extract buttons (chips) or lists
                 elif 'options' in item_dict and item_dict['type'] == 'chips':
                     for option in item_dict['options']:
                         title = option['text']
                         anchorHref = option.get('anchor', {}).get('href', "")
                         id = option.get('id', {})
+
+                        # Handle lists
                         if id:
-                            lists.append({
-                                "id": id,
-                                "title": title
-                            })
+                            lists.append({"id": id, "title": title})
                         else:
+                            # Handle buttons (URL or reply)
                             if anchorHref:
-                                buttons.append({
-                                    "type": "url",
-                                    "url": anchorHref,
-                                    "title": title
-                                })
+                                buttons.append({"type": "url", "url": anchorHref, "title": title})
                             else:
-                                buttons.append({
-                                    "type": "reply",
-                                    "reply": {
-                                        "id": title,
-                                        "title": title
-                                    }
-                                })
+                                buttons.append({"type": "reply", "reply": {"id": title, "title": title}})
 
         return buttons, lists, payload_text
 
@@ -169,7 +167,7 @@ class DialogflowController:
                 "action": {"buttons": buttons}
             }
         }
-    
+
     async def create_list_message(self, text, lists):
         """
         Create a list message for WhatsApp interactive messages.
@@ -221,19 +219,13 @@ class DialogflowController:
             # Add a text message to the response if provided
             if text_response:
                 response["fulfillmentResponse"]["messages"].append(
-                    {
-                        "text": {
-                            "text": [text_response]
-                        }
-                    }
+                    {"text": {"text": [text_response]}}
                 )
 
             # Add payload (interactive) messages to the response if provided
             if payload_response:
                 response["fulfillmentResponse"]["messages"].append(
-                    {
-                        "payload": payload_response
-                    }
+                    {"payload": payload_response}
                 )
 
             # Include any session parameters if provided
@@ -317,11 +309,13 @@ class DialogflowController:
                     response = await self.assign_user_to_accepted_job(parameters, recipient_number)
                     return response
                 
-                if tag == 'userJobList':
-                    response = await self.user_job_list(recipient_number)
+                if tag == 'getJobsToMarkAsComplete':
+                    response = await self.get_jobs_to_mark_as_complete(recipient_number)
                     return response
-                
-                
+
+                if tag == 'jobMarkAsComplete':
+                    response = await self.job_mark_as_complete(parameters, recipient_number)
+                    return response
 
             return {"status": "error", "message": "No valid tag found in fulfillment info."}
         except Exception as e:
@@ -334,6 +328,7 @@ class DialogflowController:
 
         Args:
             parameters (dict): The parameters from Dialogflow.
+            text (str, optional): Additional text to include in the job description. Defaults to None.
 
         Returns:
             dict: The webhook response with updated parameters.
@@ -369,14 +364,14 @@ class DialogflowController:
 
                 # Case 1: ML model returns one category or both categories are the same
                 if category and (not suggested_by_gemini or category == suggested_by_gemini):
-                    if(json_parameters["job_type"]):
-                        if(json_parameters["job_type"] == 'post_job'):
+                    if json_parameters["job_type"]:
+                        if json_parameters["job_type"] == 'post_job':
                             response_message = (
                                 f"We recommend posting your job under the *'{category}'* category. "
                                 "Please confirm if this is correct."
                             )
-                        
-                        if(json_parameters["job_type"] == 'find_job'):
+
+                        if json_parameters["job_type"] == 'find_job':
                             response_message = (
                                 f"We recommend finding your job under the *'{category}'* category. "
                                 "Please confirm if this is correct."
@@ -384,9 +379,7 @@ class DialogflowController:
 
                         payload_response = {
                             "richContent": [
-                                {
-                                    "text": response_message
-                                },
+                                {"text": response_message},
                                 {
                                     "type": "chips",
                                     "options": [
@@ -402,15 +395,14 @@ class DialogflowController:
 
                 # Case 2: Gemini verification suggests a different category and verification_status_by_gemini is incorrect
                 elif verification_status_by_gemini == 'incorrect' and suggested_by_gemini and suggested_by_gemini != 'None':
-                    
-                    if(json_parameters["job_type"] != 'None'):
-                        if(json_parameters["job_type"] == 'post_job'):
+                    if json_parameters["job_type"] != 'None':
+                        if json_parameters["job_type"] == 'post_job':
                             response_message = (
                                 f"We recommend posting your job under the *'{suggested_by_gemini}'* category. "
                                 "Please confirm if this is correct."
                             )
-                        
-                        if(json_parameters["job_type"] == 'find_job'):
+
+                        if json_parameters["job_type"] == 'find_job':
                             response_message = (
                                 f"We recommend finding your job under the *'{suggested_by_gemini}'* category. "
                                 "Please confirm if this is correct."
@@ -418,9 +410,7 @@ class DialogflowController:
 
                     payload_response = {
                         "richContent": [
-                            {
-                                "text": response_message
-                            },
+                            {"text": response_message},
                             {
                                 "type": "chips",
                                 "options": [
@@ -445,9 +435,7 @@ class DialogflowController:
 
                     payload_response = {
                         "richContent": [
-                            {
-                                "text": response_message
-                            },
+                            {"text": response_message},
                             {
                                 "type": "chips",
                                 "options": [
@@ -494,13 +482,18 @@ class DialogflowController:
         }
 
         try:
-            response = await sync_to_async(requests.post)(f"{CLASSIFICATION_MODEL_API_URL}/confirm_category", json=payload, headers=headers)
-            response.raise_for_status()
+            # Send a POST request to the ML model to confirm the category
+            response = await sync_to_async(requests.post)(
+                f"{CLASSIFICATION_MODEL_API_URL}/confirm_category",
+                json=payload,
+                headers=headers
+            )
+            response.raise_for_status()  # Raise an error for bad responses
             return response.json()
         except requests.exceptions.RequestException as e:
             print(f"Error confirming category with ML model: {e}")
             return {"error": str(e)}
-        
+
     async def validate_job_data(self, parameters, text=None):
         """
         Validate the collected post job data.
@@ -583,6 +576,8 @@ class DialogflowController:
             job_location = parameters.get("location_data", "N/A")
             amount = parameters.get("amount", {})
             posting_fee = parameters.get("posting_fee")
+
+            # Format the job date and time
             job_date_str = f"{int(job_date.get('month'))}/{int(job_date.get('day'))}/{int(job_date.get('year'))}"
             job_time_obj = datetime.time(
                 hour=int(job_time.get('hours', 0)),
@@ -592,9 +587,9 @@ class DialogflowController:
             job_time_str = job_time_obj.strftime("%I:%M %p")
             amount_str = f"${amount.get('amount'):.2f}" if amount else "N/A"
 
-            # Create a response message
+            # Create a response message for confirmation
             response_message = (
-                f"✨ *Please confirm the details of your job posting:* ✨\n\n"
+                f"✨ *Please confirm the details of your job creating:* ✨\n\n"
                 f"  🔹 *Job Category:* {job_category.capitalize()}\n"
                 f"  🔹 *Date:* {job_date_str}\n"
                 f"  🔹 *Time:* {job_time_str}\n"
@@ -605,25 +600,19 @@ class DialogflowController:
                 f"Please respond with: *Yes* to confirm, *No* to cancel and return to the main menu\n"
             )
 
-            payloadResponse = {
+            payload_response = {
                 "richContent": [
-                    {
-                        "text": response_message
-                    },
+                    {"text": response_message},
                     {
                         "type": "chips",
                         "options": [
-                            {
-                                "text": "Yes",
-                            },
-                            {
-                                "text": "No",
-                            }
+                            {"text": "Yes"},
+                            {"text": "No"},
                         ]
                     }
                 ]
             }
-            return await self.webhook_response(None, payloadResponse, None)
+            return await self.webhook_response(None, payload_response, None)
 
         except Exception as e:
             print(f"Error confirming job data: {e}")
@@ -648,11 +637,11 @@ class DialogflowController:
             job_date = parameters.get("date", {})
             job_time = parameters.get("time", {})
             job_location = parameters.get("location_data", "N/A")
-            amount = float(parameters.get('amount').get('amount'))
-            posting_fee = float(parameters.get('posting_fee'))
+            amount = float(parameters.get('amount', {}).get('amount', 0))
+            posting_fee = float(parameters.get('posting_fee', 0))
 
             # Format job date and time
-            job_date_str = f"{int(job_date.get('month'))}/{int(job_date.get('day'))}/{int(job_date.get('year'))}"
+            job_date_str = f"{int(job_date.get('month', 0))}/{int(job_date.get('day', 0))}/{int(job_date.get('year', 0))}"
             job_time_obj = datetime.time(
                 hour=int(job_time.get('hours', 0)),
                 minute=int(job_time.get('minutes', 0)),
@@ -695,9 +684,9 @@ class DialogflowController:
             # Update chat session with job ID
             await ChatSessionRepository.update_chat_session_job_id(chat_session_id, job.id)
 
-            # Format job ID
+            # Format job ID with leading zeros
             job_id_padded = str(job.id).zfill(5)
-        
+
             # Create or retrieve Stripe customer
             customer_data = {
                 "name": user.name,
@@ -705,39 +694,36 @@ class DialogflowController:
             }
             stripe_customer = await self.stripe_client.create_or_retrieve_customer(customer_data)
             if not stripe_customer:
-                raise Exception('Failed to create or retrieve customer stripe.')
+                raise Exception('Failed to create or retrieve Stripe customer.')
 
             # Create Stripe checkout session
             checkout_session_data = {
                 'job_id': job_id_padded,
                 'transaction_amount': amount,
-                'job_category':job_category.capitalize(),
-                'job_date':job_date_str,
-                'job_time':job_time_str,
+                'job_category': job_category.capitalize(),
+                'job_date': job_date_str,
+                'job_time': job_time_str,
                 'job_description': job_description,
                 'posting_fee': posting_fee,
                 'total_amount': (amount + posting_fee),
                 'stripe_customer_id': stripe_customer.id,
-                'recipient_number':recipient_number,
-                'user_id':user.id
+                'recipient_number': recipient_number,
+                'user_id': user.id
             }
             checkout_session = await self.stripe_client.create_checkout_session(checkout_session_data)
             if not checkout_session:
-                raise Exception('Failed to create checkout sessions stripe.')
+                raise Exception('Failed to create Stripe checkout session.')
 
             # Update job with payment details
             update_job_data = {
                 'payment_id': checkout_session.id,
                 'payment_intent': checkout_session.payment_intent,
             }
+            await JobRepository.update_job({"id": job.id}, update_job_data)
 
-            where_criteria = {"id": job.id}
-
-            await JobRepository.update_job(where_criteria, update_job_data)
-
-            # Create a response message
+            # Create a response message for job created
             response_message = (
-                f"🎉 *Your job has been posted successfully!* 🎉\n\n"
+                f"🎉 *Your job has been created successfully!* 🎉\n\n"
                 f"  🔹 *Job ID*: #{job_id_padded}\n"
                 f"  🔹 *Job Category:* {job_category.capitalize()}\n"
                 f"  🔹 *Date:* {job_date_str}\n"
@@ -753,9 +739,7 @@ class DialogflowController:
             # Create payload response with a button for payment
             payload_response = {
                 "richContent": [
-                    {
-                        "text": response_message
-                    },
+                    {"text": response_message},
                     {
                         "type": "chips",
                         "options": [
@@ -800,16 +784,15 @@ class DialogflowController:
             # Get the category ID if a job category is provided
             if job_category:
                 category = await CategoryRepository.get_category_by_name(job_category)
-                if category:
-                    job_category_id = category.id
+                job_category_id = category.id if category else None
 
             # Construct conditions
             conditions = {
                 **({"category_id": job_category_id} if job_category_id else {}),
                 **({"amount": {"gte": amount.get('amount')}} if amount and amount.get('amount') else {}),
                 **({"zip_code": job_zip_code} if job_zip_code else {}),
-                **({"status": "posted"}),
-                **({"payment_status": "authorized"})
+                "status": "posted",
+                "payment_status": "authorized"
             }
 
             # Handle date and time filtering
@@ -835,25 +818,18 @@ class DialogflowController:
             # Sort order and limit
             order = [("amount", "desc"), ("date_time", "asc")]
 
-            isFoundJobs = 'No'
-
             # Find jobs
             found_jobs = await JobRepository.find_all_jobs_with_conditions(conditions, order, limit=5)
             if found_jobs:
-                isFoundJobs = 'Yes'
-                if error_text:
-                    summary_text = (
-                        f"⚠️ {error_text} ⚠️\n\n"
-                    )
-                else:
-                    summary_text = (
-                        f"✨ *Here are the jobs matching your criteria:* ✨\n\n"
-                    )
-                # Dynamically create options for each job
+                summary_text = (
+                    f"✨ *Here are the jobs matching your criteria:* ✨\n\n"
+                )
                 options = []
+
+                # Dynamically create options for each job
                 for idx, job in enumerate(found_jobs, 1):
                     job_time_str = job.date_time.strftime("%m/%d/%Y at %I:%M %p")
-                    job_title =  f"Job #{str(job.id)}"
+                    job_title = f"Job #{job.id}"
                     job_id = str(job.id)
                     options.append({"text": job_title, "id": job_id})
                     summary_text += (
@@ -864,9 +840,7 @@ class DialogflowController:
 
                 payload_response = {
                     "richContent": [
-                        {
-                            "text": summary_text
-                        },
+                        {"text": summary_text},
                         {
                             "type": "chips",
                             "options": options
@@ -874,18 +848,19 @@ class DialogflowController:
                     ]
                 }
 
-                if not json_parameters:
+                # Update json_parameters to indicate jobs were found
+                if json_parameters is None:
                     json_parameters = {}
-                json_parameters["is_found_jobs"] = isFoundJobs
+                json_parameters["is_found_jobs"] = 'Yes'
 
                 return await self.webhook_response(None, payload_response, json_parameters)
 
-            else:
-                summary_text = "Unfortunately, we currently do not have any jobs that match the criteria entered. Please adjust your criteria."
-                if not json_parameters:
-                    json_parameters = {}
-                json_parameters["is_found_jobs"] = isFoundJobs
-                return await self.webhook_response(summary_text, None, json_parameters)
+            # No jobs found
+            summary_text = "Unfortunately, we currently do not have any jobs that match the criteria entered. Please adjust your criteria."
+            if json_parameters is None:
+                json_parameters = {}
+            json_parameters["is_found_jobs"] = 'No'
+            return await self.webhook_response(summary_text, None, json_parameters)
 
         except Exception as e:
             print(f"Error finding job data: {e}")
@@ -893,7 +868,7 @@ class DialogflowController:
 
     async def found_jobs_selected_id(self, parameters, recipient_number):
         """
-        Search parameters for job finding.
+        Handle the selection of a found job by the user.
 
         Args:
             parameters (dict): The parameters from Dialogflow.
@@ -904,7 +879,7 @@ class DialogflowController:
         """
         try:
             selected_job_id = parameters.get("selected_job_id", None)
-            
+
             # Get the selected job by job ID
             selected_job = await JobRepository.find_job_with_conditions({"id": selected_job_id})
             if not selected_job:
@@ -917,8 +892,9 @@ class DialogflowController:
             # Get user by phone number
             user = await UserRepository.get_user_by_phone_number(recipient_number)
             if not user:
-                 print({"error": "User not found"})
+                print({"error": "User not found"})
 
+            # Check if the job was posted by the user
             if selected_job.posted_by != user.id:
                 # Check if the user already accepted jobs at the same time
                 same_time_job_exist = await JobRepository.find_job_with_conditions({
@@ -943,7 +919,7 @@ class DialogflowController:
                     "selected_job_id_is_valid": "Yes"
                 }
 
-                # Create a response message
+                # Create a response message for job acceptance confirmation
                 response_message = (
                     f"✨ *Great! Please confirm you want to accept this job:* ✨\n\n"
                     f"  🔹 *Job Category:* {selected_job.category.name.capitalize()}\n"
@@ -952,14 +928,12 @@ class DialogflowController:
                     f"  🔹 *Location:* {selected_job.zip_code}\n"
                     f"  🔹 *Amount:* ${selected_job.amount:.2f}\n"
                     f"  🔹 *Requirement:* {selected_job.job_description}\n\n"
-                    f"Please respond with: *Accept* to confirm, *Decline* to cancel and return to the main menu\n"
+                    f"Please respond with: *Accept* to confirm, *Decline* to cancel and return to the main menu.\n"
                 )
 
                 payload_response = {
                     "richContent": [
-                        {
-                            "text": response_message
-                        },
+                        {"text": response_message},
                         {
                             "type": "chips",
                             "options": [
@@ -979,7 +953,7 @@ class DialogflowController:
                 )
 
         except Exception as e:
-            print(f"Error finding job data: {e}")
+            print(f"Error processing job selection: {e}")
             return {"error": "Failed to find job data"}
 
     async def assign_user_to_accepted_job(self, parameters, recipient_number):
@@ -995,7 +969,6 @@ class DialogflowController:
         """
         try:
             selected_job_id = parameters.get("selected_job_id")
-            
             # Get the selected job by job ID
             selected_job = await JobRepository.find_job_with_conditions({"id": selected_job_id})
             if not selected_job:
@@ -1016,12 +989,12 @@ class DialogflowController:
             # Get user by phone number
             user = await UserRepository.get_user_by_phone_number(recipient_number)
             if not user:
-                 print({"error": "User not found"})
+                print("User not found for phone number: %s", recipient_number)
 
             # Fetch the full address data from the Address table
             address = await AddressRepository.get_address_by_id(selected_job.address_id)
             if not address:
-                print({"error": "Address not found"})
+                print("Address not found for job ID: %s", selected_job_id)
 
             # Update the job status to accepted
             update_job_data = {
@@ -1057,7 +1030,7 @@ class DialogflowController:
         Predict the job category using the ML model.
 
         Args:
-            job_description (str): The job description.
+            service_description (str): The job description.
 
         Returns:
             dict: The response from the ML model with category suggestions.
@@ -1098,7 +1071,6 @@ class DialogflowController:
             tuple: A tuple containing a boolean indicating validity and a dictionary with city and state information.
         """
         try:
-            
             url = f"https://maps.googleapis.com/maps/api/geocode/json?address={zip_code}&key={self.api_key}&sensor=true"
             response = await sync_to_async(requests.get)(url)
             response.raise_for_status()
@@ -1122,96 +1094,185 @@ class DialogflowController:
                 else:
                     return False, {}
             else:
+                print(f"Error in assign user to accepted job: {e}")("Invalid zip code response from Google Maps API: %s", data)
                 return False, {}
         except requests.RequestException as e:
-            print(f"Error validating zip code: {e}")
+            print(f"Error in assign user to accepted job: {e}")("Error validating zip code: %s", e)
             return False, {}
 
-    async def user_job_list(self, recipient_number):
-            """
-            Send a message listing the jobs posted or accepted by the user.
+    async def get_jobs_to_mark_as_complete(self, recipient_number):
+        """
+        Send a message listing the posted or accepted jobs that can be marked as complete.
 
-            Args:
-                recipient_number (str): The phone number of the recipient.
-            """
-            try:
-                # Fetch the user based on their phone number
-                user = await UserRepository.get_user_by_phone_number(recipient_number)
-                if user:
-                    order = [("id", "asc")]
-                    
-                    # Fetch jobs posted by the user
-                    posted_jobs = await JobRepository.find_all_jobs_with_conditions({
-                        "status": 'posted',
-                        "posted_by": user.id
-                    }, order, 10)
+        Args:
+            recipient_number (str): The phone number of the recipient.
+        """
+        try:
+            # Fetch the user based on their phone number
+            user = await UserRepository.get_user_by_phone_number(recipient_number)
+            if not user:
+                print("User not found for phone number: %s", recipient_number)
+                return await self.webhook_response("User not found.", None, None)
 
-                    # Fetch jobs accepted by the user
-                    accepted_jobs = await JobRepository.find_all_jobs_with_conditions({
-                        "status": 'accepted',
-                        "accepted_by": user.id
-                    }, order, 10)
+            # Define the order for fetching jobs (ascending by ID)
+            order = [("id", "asc")]
+            
+            # Fetch jobs posted by the user that can be marked as complete (status: posted)
+            posted_jobs = await JobRepository.find_all_jobs_with_conditions({
+                "status": 'posted',
+                "posted_by": user.id,
+                "accepted_by": {"not_null": True},  
+            }, order, 10)
 
-                    # Construct the response message
-                    summary_text = (
-                        f"✨ *Here are the jobs to mark as complete:* ✨\n\n"
+            # Fetch jobs accepted by the user that can be marked as complete (status: accepted)
+            accepted_jobs = await JobRepository.find_all_jobs_with_conditions({
+                "status": 'accepted',
+                "accepted_by": user.id
+            }, order, 10)
+
+            # Initialize the message text for the response
+            summary_text = "✨ *Here are the jobs you can mark as complete:* ✨\n\n"
+            options = []
+
+            # List posted jobs
+            if posted_jobs:
+                summary_text += "🌟 *Your Posted Jobs:*\n\n"
+                for idx, job in enumerate(posted_jobs, 1):
+                    job_time_str = job.date_time.strftime("%m/%d/%Y at %I:%M %p")
+                    job_title = f"Job #{str(job.id)}"
+                    job_id = str(job.id)
+                    options.append({"text": job_title, "id": job_id})
+                    summary_text += (
+                        f"*{idx}) Job ID #{job.id}:* {job.category.name.capitalize()} on {job_time_str} "
+                        f"in ZIP {job.zip_code} for ${job.amount:.2f}\n\n"
                     )
 
-                    options = []
+            # List accepted jobs
+            if accepted_jobs:
+                summary_text += "👍 *Your Accepted Jobs:*\n\n"
+                for idx, job in enumerate(accepted_jobs, 1):
+                    job_time_str = job.date_time.strftime("%m/%d/%Y at %I:%M %p")
+                    job_title = f"Job #{str(job.id)}"
+                    job_id = str(job.id)
+                    options.append({"text": job_title, "id": job_id})
+                    summary_text += (
+                        f"*{idx}) Job ID #{job.id}:* {job.category.name.capitalize()} on {job_time_str} "
+                        f"in ZIP {job.zip_code} for ${job.amount:.2f}\n\n"
+                    )
 
-                    # Check and list posted jobs
-                    if posted_jobs:
-                        summary_text += "🌟 *Your Posted Jobs:*\n\n"
-                        for idx, job in enumerate(posted_jobs, 1):
-                            job_time_str = job.date_time.strftime("%m/%d/%Y at %I:%M %p")
-                            job_title =  f"Job #{str(job.id)}"
-                            job_id = str(job.id)
-                            options.append({"text": job_title, "id": job_id})
-                            summary_text += (
-                                f"*{idx}) Job ID #{job.id}:* {job.category.name.capitalize()} on {job_time_str} in ZIP {job.zip_code} for ${job.amount:.2f}\n\n"
-                            )
+            # If there are jobs to mark as complete, prompt the user to select one
+            if posted_jobs or accepted_jobs:
+                summary_text += "Which job would you like to mark as complete?\n"
+                payload_response = {
+                    "richContent": [
+                        {"text": summary_text},
+                        {"type": "chips", "options": options}
+                    ]
+                }
+                
+                # Send the response to Webhook
+                return await self.webhook_response(None, payload_response, None)
 
-                    # Check and list accepted jobs
-                    if accepted_jobs:
-                        summary_text += "👍 *Your Accepted Jobs:*\n\n"
-                        for idx, job in enumerate(accepted_jobs, 1):
-                            job_time_str = job.date_time.strftime("%m/%d/%Y at %I:%M %p")
-                            job_title =  f"Job #{str(job.id)}"
-                            job_id = str(job.id)
-                            options.append({"text": job_title, "id": job_id})
-                            summary_text += (
-                                f"*{idx}) Job ID #{job.id}:* {job.category.name.capitalize()} on {job_time_str} in ZIP {job.zip_code} for ${job.amount:.2f}\n\n"
-                            )
+            # If no jobs are found, notify the user
+            response_message = "🚫 You have no jobs posted or accepted."
+            return await self.webhook_response(response_message, None, None)
 
-                    # If jobs were found
-                    if posted_jobs or accepted_jobs:
-                        summary_text += "Which job do you want to mark as complete?\n"
-                        payload_response = {
-                            "richContent": [
-                                {
-                                    "text": summary_text
-                                },
-                                {
-                                    "type": "chips",
-                                    "options": options
-                                }
-                            ]
+        except Exception as e:
+            # Handle any errors encountered during the process
+            print(f"Error finding jobs for user: {e}")
+
+    async def job_mark_as_complete(self, parameters, recipient_number):
+        """
+        Mark a job as complete based on the job ID provided by the user.
+
+        Args:
+            parameters (dict): Parameters from the user containing the selected job ID.
+            recipient_number (str): The phone number of the recipient.
+        """
+        try:
+            # Fetch the user based on their phone number
+            user = await UserRepository.get_user_by_phone_number(recipient_number)
+            if not user:
+                return await self.webhook_response("User not found.", None, None)
+
+            job_id = parameters.get("selected_job_id")
+            if not job_id:
+                print("Job ID not provided in parameters.")
+                return await self.webhook_response("Job ID must be provided.", None, None)
+
+            # Get the selected job by job ID
+            job = await JobRepository.find_job_with_conditions({"id": job_id})
+            job_id_padded = str(job.id).zfill(5)
+
+            if not job:
+                return await self.webhook_response(f"Job ID #{job_id_padded} not found.", None, None)
+
+            if job.posted_by == user.id:
+                # User is the poster, mark the job as completed
+                update_job_data = {'status': 'completed'}
+                where_criteria = {"id": job_id}
+                await JobRepository.update_job(where_criteria, update_job_data)
+
+                # Notify the seeker that the job is completed
+                seeker = await UserRepository.get_user_by_id(job.accepted_by)
+                if seeker:
+                    # Sending notification to the seeker
+                    notification_message_seeker = (
+                        f"✅ The job ID #{job_id_padded} has been marked as completed by the poster. "
+                        f"Please check the job details for confirmation."
+                    )
+                    buttons = [
+                        {
+                            "type": "reply",
+                            "reply": {
+                                "id": "My Jobs",
+                                "title": "My Jobs"
+                            }
                         }
-                        
-                        # Send the response to Webhook
-                        return await self.webhook_response(None, payload_response, None)
+                    ]
+                    
+                    interactive_message = await self.create_button_message(notification_message_seeker, buttons)
+                    await self.whatsapp_client.send_whatsapp_message(seeker.phone_number, interactive_message, 'interactive')
 
-                    # If no jobs were found, provide a different response
-                    if not posted_jobs and not accepted_jobs:
-                        response_message = "🚫 You have no jobs posted or accepted."
+                return await self.webhook_response(f"✅ Job ID #{job_id_padded} has been marked as completed.", None, None)
 
-                        # Send the response to Webhook
-                        return await self.webhook_response(response_message, None, None)
-                else:
-                    # Send the response to Webhook
-                    return await self.webhook_response("User not found.", None, None)
+            elif job.accepted_by == user.id:
+                # User is the accepter, mark job as pending-review
+                update_job_data = {'status': 'pending-review'}  # Set to pending-review
+                where_criteria = {"id": job_id}
+                await JobRepository.update_job(where_criteria, update_job_data)
 
-            except Exception as e:
-                print(f"Error finding jobs for user: {e}")
-                await self.send_error_message(recipient_number)
+                # Notify the poster that the job is pending review
+                poster = await UserRepository.get_user_by_id(job.posted_by)
+                if poster:
+                    # Send notification to the poster
+                    notification_message_poster = (
+                        f"🚀 *Attention!* Job ID #{job_id_padded} has been marked as pending review by {user.name} "
+                        f"(the accepter). Please review and mark it as complete."
+                    )
+                    buttons = [
+                        {
+                            "type": "reply",
+                            "reply": {
+                                "id": f"#{job_id_padded} Completed",
+                                "title": f"#{job_id_padded} Completed"
+                            }
+                        }
+                    ]
+                    
+                    interactive_message = await self.create_button_message(notification_message_poster, buttons)
+                    await self.whatsapp_client.send_whatsapp_message(poster.phone_number, interactive_message, 'interactive')
 
+                # Send confirmation to the seeker
+                notification_message_seeker = (
+                    f"✅ You have successfully marked Job ID #{job_id_padded} as pending review. "
+                    f"The poster has been notified to review the completion details."
+                )
+                return await self.webhook_response(notification_message_seeker, None, None)
+
+            else:
+                return await self.webhook_response(f"🚫 You do not have permission to mark Job ID #{job_id_padded} as complete.", None, None)
+
+        except Exception as e:
+            print(f"Error marking job as complete: {e}")
+            return await self.webhook_response("An error occurred while marking the job as complete.", None, None)

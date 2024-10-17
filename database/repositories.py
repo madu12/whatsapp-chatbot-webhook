@@ -27,6 +27,24 @@ class UserRepository:
             return None
 
     @staticmethod
+    async def get_user_by_id(user_id: int):
+        """
+        Retrieve a user by their unique identifier (ID).
+
+        Args:
+            user_id (int): The unique identifier of the user.
+
+        Returns:
+            User: The user object if found, else None.
+        """
+        try:
+            session = create_session()
+            return session.query(User).filter(User.id == user_id).first()
+        except SQLAlchemyError as e:
+            print(f"Error retrieving user by ID: {e}")
+            return None
+
+    @staticmethod
     async def create_user(name: str, phone_number: str):
         """
         Create a new user with the given name and phone number.
@@ -263,8 +281,8 @@ class JobRepository:
         """
         try:
             session = create_session()
-            query = session.query(Job).options(joinedload(Job.category))  
-            
+            query = session.query(Job).options(joinedload(Job.category))
+
             # Apply filter conditions
             for key, value in conditions.items():
                 if isinstance(value, dict):  # Handle different types of conditions
@@ -274,6 +292,8 @@ class JobRepository:
                         query = query.filter(getattr(Job, key) <= value["lte"])
                     elif "in" in value:
                         query = query.filter(getattr(Job, key).in_(value["in"]))
+                    elif "not_null" in value and value["not_null"]:
+                        query = query.filter(getattr(Job, key) != None)
                     else:  # Default to equality if no specific operator is provided
                         query = query.filter(getattr(Job, key) == value)
                 else:
