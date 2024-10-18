@@ -985,16 +985,16 @@ class DialogflowController:
                     error_text="*This job is no longer available for acceptance. Please choose another job.*",
                     json_parameters={"selected_own_job_id": "No", "selected_same_time_job_id": "No", "selected_job_id_is_valid": "No"}
                 )
-            
-            # Get user by phone number
+
+            # Get user by phone number (the seeker accepting the job)
             user = await UserRepository.get_user_by_phone_number(recipient_number)
             if not user:
-                print("User not found for phone number: %s", recipient_number)
+                print(f"User not found for phone number: {recipient_number}")
 
             # Fetch the full address data from the Address table
             address = await AddressRepository.get_address_by_id(selected_job.address_id)
             if not address:
-                print("Address not found for job ID: %s", selected_job_id)
+                print(f"Address not found for job ID: {selected_job_id}")
 
             # Update the job status to accepted
             update_job_data = {
@@ -1010,20 +1010,47 @@ class DialogflowController:
 
             # Format the full address
             full_address = f"{address.street}, {address.city}, {address.state} {address.zip_code}"
+            
+            job_id_padded = str(selected_job.id).zfill(5)
 
-            # Create the response message
+            # Create the response message for the seeker
             response_message = (
                 f"✨ *Great! You've successfully accepted the job!* ✨\n\n"
+                f"*Job ID:* #{job_id_padded}\n"
                 f"We'll see you at *{full_address}* on *{selected_job_date_str}* at *{selected_job_time_str}*.\n"
                 f"You'll receive *${selected_job.amount:.2f}* after completing this job.\n\n"
-                f"*Job Details:* {selected_job.job_description}\n"
+                f"*Job Details:* {selected_job.job_description}\n\n"
+                f"What would you like to do next? 😊"
             )
 
-            return await self.webhook_response(response_message, None, None)
+            # Notify the poster that the job has been accepted
+            poster = await UserRepository.get_user_by_id(selected_job.posted_by)
+            if poster:
+                notification_message_poster = (
+                    f"🚀 Your job ID #{job_id_padded} has been accepted by {user.name}. "
+                    "They'll arrive at the scheduled time. Get ready!"
+                )
+                await self.whatsapp_client.send_whatsapp_message(poster.phone_number, notification_message_poster, 'text')
+
+            payload_response = {
+                "richContent": [
+                    {"text": response_message},
+                    {
+                        "type": "chips",
+                        "options": [
+                            {"text": "Post Another Job"},
+                            {"text": "Find Another Job"},
+                            {"text": "Mark Job as Complete"}
+                        ]
+                    }
+                ]
+            }
+            return await self.webhook_response(None, payload_response, None)
 
         except Exception as e:
             print(f"Error in assign user to accepted job: {e}")
             return {"error": "An error occurred while processing the job data."}
+
 
     async def get_job_category(self, service_description):
         """
