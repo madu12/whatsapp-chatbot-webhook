@@ -24,7 +24,7 @@ class WhatsAppController:
         try:
             post_job_phrases = ["post job", "post a job", "post new job", "post another job"]
             find_job_phrases = ["find job", "find a job", "find new job", "find another job"]
-            mark_complete_phrases = ["complete job", "mark as complete", "job complete", "done with job"]
+            mark_complete_phrases = ["complete job", "mark as complete", "mark job as complete", "job complete", "done with job"]
 
             user = await UserRepository.get_user_by_phone_number(recipient_number)
             if not user:
@@ -74,7 +74,7 @@ class WhatsAppController:
                 recipient_message = "Find Job"
                 await ChatSessionRepository.create_chat_session(chat_session_id, recipient_message, user.id)
             elif any(phrase in recipient_message.lower() for phrase in mark_complete_phrases):
-                recipient_message = "Mark as Complete"
+                recipient_message = "Mark Job as Complete"
                 await ChatSessionRepository.create_chat_session(chat_session_id, recipient_message, user.id)
 
             dialogflow_response = await self.dialogflow_controller.handle_message(recipient_message, recipient_number, chat_session_id)
@@ -172,8 +172,8 @@ class WhatsAppController:
                     {
                         "type": "reply",
                         "reply": {
-                            "id": "Mark as Complete",
-                            "title": "Mark as Complete"
+                            "id": "Mark Job as Complete",
+                            "title": "Mark Job as Complete"
                         }
                     }
             ]
@@ -182,7 +182,7 @@ class WhatsAppController:
                 f"Please try one of the following options:\n"
                 f'1️⃣ Post Job: Type "Post Job" to start posting a new job.\n'
                 f'2️⃣ Find Job: Type "Find Job" to search for available jobs.\n'
-                f'3️⃣ Mark as Complete: Type "Mark as Complete" to update the job status to complete.\n\n'
+                f'3️⃣ Mark Job as Complete: Type "Mark Job as Complete" to update the job status to complete.\n\n'
                 f"If you need any assistance, just type 'help'. 💬"
             )
             interactive_message = await self.dialogflow_controller.create_button_message(response_message, buttons)
@@ -269,8 +269,8 @@ class WhatsAppController:
                 {
                     "type": "reply",
                     "reply": {
-                        "id": "Mark as Complete",
-                        "title": "Mark as Complete"
+                        "id": "Mark Job as Complete",
+                        "title": "Mark Job as Complete"
                     }
                 }
             ]
@@ -279,7 +279,7 @@ class WhatsAppController:
                 f"✨ What would you like to do today?\n"
                 f"1️⃣ Post Job\n"
                 f"2️⃣ Find Job\n"
-                f"3️⃣ Mark as Complete\n\n"
+                f"3️⃣ Mark Job as Complete\n\n"
                 f"If you need any assistance, just type 'help'. 💬"
             )
             interactive_message = await self.dialogflow_controller.create_button_message(response_message, buttons)
@@ -317,8 +317,8 @@ class WhatsAppController:
                     {
                         "type": "reply",
                         "reply": {
-                            "id": "Mark as Complete",
-                            "title": "Mark as Complete"
+                            "id": "Mark Job as Complete",
+                            "title": "Mark Job as Complete"
                         }
                     }
                 ]
@@ -328,7 +328,7 @@ class WhatsAppController:
                     f"✨ What would you like to do next?\n"
                     f"1️⃣ Post Job\n"
                     f"2️⃣ Find Job\n"
-                    f"3️⃣ Mark as Complete\n\n"
+                    f"3️⃣ Mark Job as Complete\n\n"
                     f"If you need any assistance, just type 'help'. 💬"
                 )
                 interactive_message = await self.dialogflow_controller.create_button_message(response_message, buttons)
@@ -395,9 +395,35 @@ class WhatsAppController:
                 f"  🔹 *Escrow Amount:* {session.metadata.job_amount}\n"
                 f"  🔹 *Job Description*: {session.metadata.job_description}\n\n"
                 f"Please proceed with the escrow payment to complete the posting.\n\n"
-                f"*Note:* The address entered in Stripe will be used as the job location address.\n"
+                f"*Note:* The address entered in Stripe will be used as the job location address.\n\n"
+                f"What would you like to do next? 😊"
             )
-            await self.whatsapp_client.send_whatsapp_message(session.metadata.recipient_number, response_message, 'text')
+
+            buttons = [
+                {
+                    "type": "reply",
+                    "reply": {
+                        "id": "Post Another Job",
+                        "title": "Post Another Job"
+                    }
+                },
+                {
+                    "type": "reply",
+                    "reply": {
+                        "id": "Find Another Job",
+                        "title": "Find Another Job"
+                    }
+                },
+                {
+                    "type": "reply",
+                    "reply": {
+                        "id": "Mark Job as Complete",
+                        "title": "Mark Job as Complete"
+                    }
+                }
+            ]
+            interactive_message = await self.dialogflow_controller.create_button_message(response_message, buttons)
+            await self.whatsapp_client.send_whatsapp_message(session.metadata.recipient_number, interactive_message, 'interactive')
         except Exception as e:
             print(f"Error generating payment success message: {e}")
 
