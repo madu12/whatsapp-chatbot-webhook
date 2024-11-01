@@ -23,11 +23,11 @@ class UserRepository:
         try:
             session = create_session()
             utils = GeneralUtils()
-            encrypted_phone_number = utils.encrypt_data(phone_number)
-            user = session.query(User).filter(cast(User.phone_number, String) == encrypted_phone_number).first()
+            # encrypted_phone_number = utils.encrypt_data(phone_number)
+            user = session.query(User).filter(cast(User.phone_number, String) == phone_number).first()
 
-            if user:
-                user.phone_number = utils.decrypt_data(user.phone_number)
+            # if user:
+            #     user.phone_number = utils.decrypt_data(user.phone_number)
             
             return user
         except SQLAlchemyError as e:
@@ -50,9 +50,9 @@ class UserRepository:
             utils = GeneralUtils()
             user = session.query(User).filter(User.id == user_id).first()
         
-            if user:
-                # Decrypt the phone number before returning
-                user.phone_number = utils.decrypt_data(user.phone_number)
+            # if user:
+            #     # Decrypt the phone number before returning
+            #     user.phone_number = utils.decrypt_data(user.phone_number)
             
             return user
         except SQLAlchemyError as e:
@@ -74,12 +74,12 @@ class UserRepository:
         try:
             session = create_session()
             utils = GeneralUtils()
-            encrypted_phone_number = utils.encrypt_data(phone_number)
-            user = User(name=name, phone_number=encrypted_phone_number)
+            # encrypted_phone_number = utils.encrypt_data(phone_number)
+            user = User(name=name, phone_number=phone_number)
             session.add(user)
             session.commit()
             session.refresh(user)
-            user.phone_number = phone_number
+            # user.phone_number = phone_number
             return user
         except SQLAlchemyError as e:
             print(f"Error creating user: {e}")
