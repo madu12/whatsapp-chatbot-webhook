@@ -1,12 +1,8 @@
-import os
 from cryptography.fernet import Fernet
+from config import ENCRYPTION_KEY
 class GeneralUtils:
     def __init__(self):
-        # Load or generate encryption key
-        self.encryption_key = os.getenv("ENCRYPTION_KEY")  # Key should be stored securely in env vars
-        if not self.encryption_key:
-            raise ValueError("Encryption key is missing. Set it in the environment variable ENCRYPTION_KEY.")
-        
+        self.encryption_key = ENCRYPTION_KEY
         self.fernet = Fernet(self.encryption_key)
 
     def get_address_index(self, address):

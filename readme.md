@@ -81,7 +81,7 @@ BEGIN
     CREATE TABLE users (
         id INT IDENTITY(1,1) PRIMARY KEY,
         name NVARCHAR(255) NOT NULL,
-        phone_number NVARCHAR(15) NOT NULL UNIQUE,
+        phone_number NVARCHAR(MAX) NOT NULL UNIQUE,
         created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(),
         updated_at DATETIMEOFFSET
     );
