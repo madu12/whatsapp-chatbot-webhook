@@ -1,10 +1,11 @@
 import datetime
-from sqlalchemy import asc, desc, select
+from sqlalchemy import asc, desc, select, cast, String
 from sqlalchemy.orm import joinedload
 from database.models import User, Job, Category, ChatSession, Address
 from database.db_session import create_session
 from sqlalchemy.exc import SQLAlchemyError
 from utils.general_utils import GeneralUtils
+
 
 
 class UserRepository:
@@ -23,7 +24,8 @@ class UserRepository:
             session = create_session()
             utils = GeneralUtils()
             encrypted_phone_number = utils.encrypt_data(phone_number)
-            user = session.query(User).filter(User.phone_number == encrypted_phone_number).first()
+            user = session.query(User).filter(cast(User.phone_number, String) == encrypted_phone_number).first()
+
             if user:
                 user.phone_number = utils.decrypt_data(user.phone_number)
             
