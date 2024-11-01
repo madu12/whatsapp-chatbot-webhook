@@ -38,7 +38,7 @@ class GeneralUtils:
             raise ValueError("Data to be encrypted must be a string.")
         
         encrypted_data = self.fernet.encrypt(data.encode())
-        return encrypted_data.decode()
+        return encrypted_data
 
     def decrypt_data(self, encrypted_data):
         """
@@ -53,5 +53,5 @@ class GeneralUtils:
         if not isinstance(encrypted_data, str):
             raise ValueError("Encrypted data must be a string.")
         
-        decrypted_data = self.fernet.decrypt(encrypted_data.encode())
+        decrypted_data = self.fernet.decrypt(encrypted_data)
         return decrypted_data.decode()
