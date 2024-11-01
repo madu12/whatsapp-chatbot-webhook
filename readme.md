@@ -69,6 +69,7 @@ WEBSITE_URL=your_website_url
 CLASSIFICATION_MODEL_API_URL=your_classification_model_api_url
 CLASSIFICATION_MODEL_API_KEY=your_classification_model_api_key
 GOOGLE_MAPS_API_KEY=your_google_maps_api_key
+ENCRYPTION_KEY=your_encryption_key
 ```
 
 ### Database Setup

@@ -21,7 +21,14 @@ class UserRepository:
         """
         try:
             session = create_session()
-            return session.query(User).filter(User.phone_number == phone_number).first()
+            utils = GeneralUtils()
+            encrypted_phone_number = utils.encrypt_data(phone_number)
+            user = session.query(User).filter(User.phone_number == encrypted_phone_number).first()
+
+            if user:
+                user.phone_number = utils.decrypt_data(user.phone_number)
+            
+            return user
         except SQLAlchemyError as e:
             print(f"Error retrieving user by phone number: {e}")
             return None
@@ -39,7 +46,14 @@ class UserRepository:
         """
         try:
             session = create_session()
-            return session.query(User).filter(User.id == user_id).first()
+            utils = GeneralUtils()
+            user = session.query(User).filter(User.id == user_id).first()
+        
+            if user:
+                # Decrypt the phone number before returning
+                user.phone_number = utils.decrypt_data(user.phone_number)
+            
+            return user
         except SQLAlchemyError as e:
             print(f"Error retrieving user by ID: {e}")
             return None
@@ -58,10 +72,13 @@ class UserRepository:
         """
         try:
             session = create_session()
-            user = User(name=name, phone_number=phone_number)
+            utils = GeneralUtils()
+            encrypted_phone_number = utils.encrypt_data(phone_number)
+            user = User(name=name, phone_number=encrypted_phone_number)
             session.add(user)
             session.commit()
             session.refresh(user)
+            user.phone_number = phone_number
             return user
         except SQLAlchemyError as e:
             print(f"Error creating user: {e}")
