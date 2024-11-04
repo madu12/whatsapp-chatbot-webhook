@@ -2,6 +2,7 @@ import uuid
 from clients.whatsapp_client import WhatsAppClient
 from controllers.dialogflow_controller import DialogflowController
 from database.repositories import JobRepository, UserRepository, ChatSessionRepository
+from config import WEBSITE_URL
 
 class WhatsAppController:
     def __init__(self):
@@ -12,6 +13,7 @@ class WhatsAppController:
         self.dialogflow_controller = DialogflowController()
         self.sessions = {}
         self.processed_message_ids = set()
+        self.website_url = WEBSITE_URL
 
     async def process_text_message(self, recipient_number, recipient_name, recipient_message):
         """
@@ -28,11 +30,23 @@ class WhatsAppController:
 
             user = await UserRepository.get_user_by_phone_number(recipient_number)
             if not user:
-                await self.register_new_user(recipient_number, recipient_name)
+                await self.request_user_agreement(recipient_number)
                 return
 
             if recipient_message.lower() == "help":
                 await self.send_help_message(recipient_number)
+                return
+            
+            if recipient_message.lower() == "privacy":
+                await self.send_privacy_message(recipient_number)
+                return
+            
+            if recipient_message.lower() == "agree":
+                await self.register_new_user(recipient_number, recipient_name)
+                return
+            
+            if recipient_message.lower() == "decline":
+                await self.send_decline_message(recipient_number)
                 return
             
             if recipient_message.lower() == "my jobs":
@@ -210,7 +224,7 @@ class WhatsAppController:
 
             user = await UserRepository.get_user_by_phone_number(recipient_number)
             if not user:
-                await self.register_new_user(recipient_number, recipient_name)
+                await self.request_user_agreement(recipient_number)
                 return {"status": "ok"}
 
             if message_id in self.processed_message_ids:
@@ -336,6 +350,62 @@ class WhatsAppController:
         except Exception as e:
             print(f"Error registering new user: {e}")
             await self.send_error_message(recipient_number)
+    
+    async def request_user_agreement(self, recipient_number):
+        """
+        Request user consent for data handling before registration.
+
+        Args:
+            recipient_number (str): The phone number of the recipient.
+            recipient_name (str): The name of the recipient.
+        """
+        try:
+            buttons = [
+                {
+                    "type": "reply",
+                    "reply": {
+                        "id": "Agree",
+                        "title": "Agree"
+                    }
+                },
+                {
+                    "type": "reply",
+                    "reply": {
+                        "id": "Decline",
+                        "title": "Decline"
+                    }
+                }
+            ]
+            response_message = (
+                f"Hello, this is HOME SERVICE CHATBOT! 🏠🤖\n\n"
+                f"To proceed, please note that by using this service, your phone number will be saved for job-related notifications and updates."
+                f"Your data is secure and handled according to our privacy policy. 🛡️ Reply 'Agree' to continue."
+            )
+            interactive_message = await self.dialogflow_controller.create_button_message(response_message, buttons)
+            await self.whatsapp_client.send_whatsapp_message(recipient_number, interactive_message, 'interactive')
+        except Exception as e:
+            print(f"Error requesting user agreement: {e}")
+            await self.send_error_message(recipient_number)
+
+
+    async def send_decline_message(self, recipient_number):
+        """
+        Send a message to the user when they decline the privacy policy.
+
+        Args:
+            recipient_number (str): The phone number of the recipient.
+        """
+        try:
+            user = await UserRepository.get_user_by_phone_number(recipient_number)
+            if not user:
+                decline_message = (
+                    f"We respect your choice. However, you need to agree to our data handling policy to use our services. "
+                    f"If you change your mind, please type 'Agree' to proceed."
+                )
+                await self.whatsapp_client.send_whatsapp_message(recipient_number, decline_message, 'text')
+        except Exception as e:
+            print(f"Error sending decline message: {e}")
+            await self.send_error_message(recipient_number)
 
     async def send_help_message(self, recipient_number):
         """
@@ -350,11 +420,32 @@ class WhatsAppController:
                 "   🔹 *Post Job:* Type 'Post Job' to start posting a new job.\n\n"
                 "   🔹 *Find Job:* Type 'Find Job' to search for available jobs.\n\n"
                 "   🔹 *My Jobs:* Type 'My Jobs' to see a list of jobs you have posted or accepted.\n\n"
+                "   🔹 *Privacy:* Your data is secure. Type 'Privacy' for info.\n"
+
             )
             await self.whatsapp_client.send_whatsapp_message(recipient_number, help_message, 'text')
         except Exception as e:
             print(f"Error sending help message: {e}")
             await self.send_error_message(recipient_number)
+    
+    async def send_privacy_message(self, recipient_number):
+        """
+        Send a privacy policy message to the user.
+
+        Args:
+            recipient_number (str): The phone number of the recipient.
+        """
+        try:
+            privacy_message = (
+                "🔒 *Privacy Policy Overview*\n\n"
+                "We take your privacy seriously. Your phone number and data are stored securely and used only for service-related communications, such as job notifications and updates. We do not share your data with unauthorized third parties.\n\n"
+                f"For more details, please visit our full privacy policy at: {self.website_url}/privacy-policy"
+            )
+            await self.whatsapp_client.send_whatsapp_message(recipient_number, privacy_message, 'text')
+        except Exception as e:
+            print(f"Error sending privacy message: {e}")
+            await self.send_error_message(recipient_number)
+
 
     async def send_error_message(self, recipient_number):
         """
