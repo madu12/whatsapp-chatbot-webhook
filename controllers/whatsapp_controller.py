@@ -30,6 +30,13 @@ class WhatsAppController:
 
             user = await UserRepository.get_user_by_phone_number(recipient_number)
             if not user:
+                if recipient_message.lower() == "agree":
+                    await self.register_new_user(recipient_number, recipient_name)
+                    return
+                
+                if recipient_message.lower() == "decline":
+                    await self.send_decline_message(recipient_number)
+
                 await self.request_user_agreement(recipient_number)
                 return
 
@@ -39,14 +46,6 @@ class WhatsAppController:
             
             if recipient_message.lower() == "privacy":
                 await self.send_privacy_message(recipient_number)
-                return
-            
-            if recipient_message.lower() == "agree":
-                await self.register_new_user(recipient_number, recipient_name)
-                return
-            
-            if recipient_message.lower() == "decline":
-                await self.send_decline_message(recipient_number)
                 return
             
             if recipient_message.lower() == "my jobs":
