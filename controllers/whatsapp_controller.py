@@ -227,14 +227,14 @@ class WhatsAppController:
                 if recipient_message.lower() == "agree" or recipient_message.lower() == "decline":
                     if recipient_message.lower() == "agree":
                         await self.register_new_user(recipient_number, recipient_name)
-                        return
+                        return {"status": "ok"}
                 
                     if recipient_message.lower() == "decline":
                         await self.send_decline_message(recipient_number)
+                        return {"status": "ok"}
                 else:
                     await self.request_user_agreement(recipient_number)
-                    
-                return {"status": "ok"}
+                    return {"status": "ok"}
 
             if message_id in self.processed_message_ids:
                 return {"status": "ok"}
