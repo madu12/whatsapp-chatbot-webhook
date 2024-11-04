@@ -439,6 +439,7 @@ class WhatsAppController:
             privacy_message = (
                 "🔒 *Privacy Policy Overview*\n\n"
                 "We take your privacy seriously. Your phone number and data are stored securely and used only for service-related communications, such as job notifications and updates. We do not share your data with unauthorized third parties.\n\n"
+                "If you wish to delete your account and all associated data, please type 'Delete Account'.\n\n"
                 f"For more details, please visit our full privacy policy at: {self.website_url}/privacy-policy"
             )
             await self.whatsapp_client.send_whatsapp_message(recipient_number, privacy_message, 'text')
