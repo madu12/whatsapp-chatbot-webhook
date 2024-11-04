@@ -224,17 +224,29 @@ class WhatsAppController:
 
             user = await UserRepository.get_user_by_phone_number(recipient_number)
             if not user:
-                if recipient_message.lower() == "agree" or recipient_message.lower() == "decline":
-                    if recipient_message.lower() == "agree":
-                        await self.register_new_user(recipient_number, recipient_name)
+                if message["type"] == "text":
+                    recipient_message = message["text"]["body"]
+                elif message["type"] == "interactive":
+                    interactive_type = message['interactive']['type']
+                    if interactive_type == 'button_reply':
+                        recipient_message = message["interactive"]["button_reply"]["id"]
+                    elif interactive_type == 'list_reply':
+                        recipient_message = message["interactive"]["list_reply"]["id"]
+                    else:
+                        recipient_message = None
+
+                if recipient_message:       
+                    if recipient_message.lower() == "agree" or recipient_message.lower() == "decline":
+                        if recipient_message.lower() == "agree":
+                            await self.register_new_user(recipient_number, recipient_name)
+                            return {"status": "ok"}
+                    
+                        if recipient_message.lower() == "decline":
+                            await self.send_decline_message(recipient_number)
+                            return {"status": "ok"}
+                    else:
+                        await self.request_user_agreement(recipient_number)
                         return {"status": "ok"}
-                
-                    if recipient_message.lower() == "decline":
-                        await self.send_decline_message(recipient_number)
-                        return {"status": "ok"}
-                else:
-                    await self.request_user_agreement(recipient_number)
-                    return {"status": "ok"}
 
             if message_id in self.processed_message_ids:
                 return {"status": "ok"}
