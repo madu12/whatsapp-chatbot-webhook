@@ -30,15 +30,16 @@ class WhatsAppController:
 
             user = await UserRepository.get_user_by_phone_number(recipient_number)
             if not user:
-                if recipient_message.lower() == "agree":
-                    await self.register_new_user(recipient_number, recipient_name)
-                    return
+                if recipient_message.lower() == "agree" or recipient_message.lower() == "decline":
+                    if recipient_message.lower() == "agree":
+                        await self.register_new_user(recipient_number, recipient_name)
+                        return
                 
-                if recipient_message.lower() == "decline":
-                    await self.send_decline_message(recipient_number)
-
-                await self.request_user_agreement(recipient_number)
-                return
+                    if recipient_message.lower() == "decline":
+                        await self.send_decline_message(recipient_number)
+                else:
+                    await self.request_user_agreement(recipient_number)
+                    return
 
             if recipient_message.lower() == "help":
                 await self.send_help_message(recipient_number)
@@ -223,7 +224,16 @@ class WhatsAppController:
 
             user = await UserRepository.get_user_by_phone_number(recipient_number)
             if not user:
-                await self.request_user_agreement(recipient_number)
+                if recipient_message.lower() == "agree" or recipient_message.lower() == "decline":
+                    if recipient_message.lower() == "agree":
+                        await self.register_new_user(recipient_number, recipient_name)
+                        return
+                
+                    if recipient_message.lower() == "decline":
+                        await self.send_decline_message(recipient_number)
+                else:
+                    await self.request_user_agreement(recipient_number)
+                    
                 return {"status": "ok"}
 
             if message_id in self.processed_message_ids:
