@@ -1,0 +1,21 @@
+site_name: Home Services Chatbot Documentation
+site_url: !ENV [MKDOCS_SITE_URL, http://127.0.0.1:5000/docs]
+theme:
+  name: 'material'
+  palette:
+    primary: 'teal'
+    accent: 'teal'
+  font:
+    text: 'Roboto'
+    code: 'Roboto Mono'
+nav:
+  - Introduction: index.md
+  - Getting Started: getting-started.md
+  - Key Features: features.md
+  - How to Use:
+      - Registering: how-to-register.md
+      - Posting a Job: how-to-post-job.md
+      - Finding a Job: how-to-find-job.md
+      - Completing a Job: how-to-complete-job.md
+  - FAQ: faq.md
+  - Privacy Policy: privacy-policy.md

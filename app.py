@@ -143,6 +143,21 @@ async def order_success():
     else:
         return redirect(url_for('home'))
 
+@app.route("/docs/<path:filename>", methods=["GET"])
+def documentation_file(filename):
+    """
+    Serve the documentation files.
+    """
+    return render_template(f"docs/{filename}")
+
+
+@app.route("/docs", methods=["GET"])
+def documentation_index():
+    """
+    Redirect to the index file of the documentation.
+    """
+    return render_template("docs/index.html")
+
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True, use_reloader=True)
