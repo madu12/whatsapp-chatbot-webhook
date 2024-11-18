@@ -118,12 +118,12 @@ class StripeClient:
             utils = GeneralUtils()
             encrypted_account_id = utils.encrypt_aes(account_id)
             account_link = stripe.AccountLink.create(
-                account=account_id,
+                account=f"{account_id}",
                 refresh_url=f"{self.website_url}/connected-account-verify?accountID={encrypted_account_id}",
                 return_url=f"{self.website_url}",
                 type="account_onboarding"
             )
-            return account_link.url
+            return account_link['url']
         except stripe.error.StripeError as e:
             print(f"Error creating Stripe Connect Account link: {e.user_message}")
             raise e
