@@ -116,7 +116,7 @@ class StripeClient:
         """
         try:
             utils = GeneralUtils()
-            encrypted_account_id = utils.encrypt_aes(account_id)
+            encrypted_account_id = utils.encrypt_aes_url_safe(account_id)
             account_link = stripe.AccountLink.create(
                 account=account_id,
                 refresh_url=f"{self.website_url}/connected-account-verify?accountID={encrypted_account_id}",
@@ -137,7 +137,7 @@ class StripeClient:
         """
         try:
             utils = GeneralUtils()
-            stripe_user_id = utils.decrypt_aes(encrypted_account_id)
+            stripe_user_id = utils.decrypt_aes_url_safe(encrypted_account_id)
 
             # Check if the account exists in the database
             existing_connect_account = StripeUserRepository.get_stripe_user_by_stripe_user_id(stripe_user_id)

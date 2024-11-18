@@ -22,7 +22,7 @@ class User(Base):
     jobs_accepted = relationship('Job', foreign_keys='Job.accepted_by', back_populates='accepter')
     chat_sessions = relationship('ChatSession', back_populates='user')
     addresses = relationship('Address', back_populates='user')
-    stripe_user = relationship('StripeUser', back_populates='user', uselist=False)
+    stripe_user = relationship('StripeUser', back_populates='user')
 
 class Category(Base):
     __tablename__ = 'categories'
@@ -69,8 +69,7 @@ class Job(Base):
     payment_transfer_id = Column(NVARCHAR(255))
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), onupdate=lambda: datetime.now(timezone.utc))
-    deleted_at = Column(DateTime(timezone=True), nullable=True)  # For soft deletion
-
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
     category = relationship('Category', back_populates='jobs')
     poster = relationship('User', foreign_keys=[posted_by], back_populates='jobs_posted')
     accepter = relationship('User', foreign_keys=[accepted_by], back_populates='jobs_accepted')

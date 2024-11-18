@@ -1,5 +1,6 @@
 import os
 from base64 import b64decode, b64encode
+from urllib.parse import quote, unquote
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding
 from config import AES_KEY, AES_IV
@@ -60,3 +61,11 @@ class GeneralUtils:
         decrypted_data = unpadder.update(decrypted_padded_data) + unpadder.finalize()
 
         return decrypted_data.decode()
+    
+    def encrypt_aes_url_safe(self, value):
+        encrypted_data = self.encrypt_aes(value, self.aes_key, self.aes_iv)
+        return quote(encrypted_data)
+
+    def decrypt_aes_url_safe(self,encrypted_value):
+        encrypted_data = unquote(encrypted_value)
+        return self.decrypt_aes(encrypted_data, self.aes_key, self.aes_iv)

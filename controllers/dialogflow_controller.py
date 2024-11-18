@@ -276,6 +276,7 @@ class DialogflowController:
 
             if fulfillment_info and "tag" in fulfillment_info:
                 tag = fulfillment_info["tag"]
+                print(tag)
                 if tag == 'predictCategory':
                     webhook_response = await self.predict_category(parameters, text)
                     return webhook_response
