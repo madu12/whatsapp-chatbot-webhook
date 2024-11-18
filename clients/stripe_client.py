@@ -185,4 +185,73 @@ class StripeClient:
         except Exception as e:
             print(f"Error creating login link: {e}")
             raise e
+        
+    async def capture_payment(self, payment_intent_id, amount, posting_fee, job_id):
+        """
+        Capture a payment from the job poster and create a top-up for the net amount to be paid to the job seeker.
 
+        Args:
+            payment_intent_id (str): The Payment Intent ID.
+            amount (float): The total payment amount.
+            posting_fee (float): The fee for posting the job.
+            job_id (int): The job ID.
+
+        Returns:
+            dict: Captured payment details.
+        """
+        try:
+            # Step 1: Calculate the total amount to capture and the net amount for the top-up
+            amount_to_capture = int((amount + posting_fee) * 100)
+            net_amount = int((amount - posting_fee) * 100)
+
+            # Step 2: Capture the payment from the job poster
+            captured_payment = stripe.PaymentIntent.capture(
+                payment_intent_id,
+                amount_to_capture=amount_to_capture
+            )
+
+            if captured_payment and captured_payment['status'] == 'succeeded':
+                # Step 3: Create a top-up for the net amount to pay the job seeker
+                top_up = stripe.TopUp.create(
+                    amount=net_amount,
+                    currency='usd',
+                    description=f"Top-up for #{str(job_id).zfill(5)} job payout",
+                    statement_descriptor="Payout top-up"
+                )
+            return captured_payment
+        
+        except Exception as ex:
+            # Log general exceptions
+            print(f"An unexpected error occurred: {str(ex)}")
+            raise ex
+
+    async def create_payout(self, account_id, amount, posting_fee, job_id):
+        """
+        Create a payout to a connected account for a completed job.
+
+        Args:
+            account_id (str): Stripe Connect Account ID.
+            amount (float): The total amount for the job (in USD).
+            job_id (int): The job ID for reference.
+            posting_fee (float): The fee for posting the job.
+
+        Returns:
+            dict: Payout details.
+        """
+        try:
+            # Calculate the net amount to transfer
+            net_amount = int((amount - posting_fee) * 100)
+
+            # Create the payout to the connected account
+            transfer = stripe.Transfer.create(
+                amount=net_amount,
+                currency='usd',
+                description=f"Payment for #{str(job_id).zfill(5)} job",
+                destination=account_id,
+                transfer_group=f"#{job_id}"
+            )
+
+            return transfer
+        except Exception as ex:
+            print(f"Unexpected error during payout creation: {str(ex)}")
+            raise ex

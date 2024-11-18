@@ -1239,7 +1239,7 @@ class DialogflowController:
 
     async def job_mark_as_complete(self, parameters, recipient_number):
         """
-        Mark a job as complete based on the job ID provided by the user.
+        Mark a job as complete, capture payment, and process payouts.
 
         Args:
             parameters (dict): Parameters from the user containing the selected job ID.
@@ -1269,18 +1269,23 @@ class DialogflowController:
                 where_criteria = {"id": job_id}
                 await JobRepository.update_job(where_criteria, update_job_data)
 
-                # Notify the seeker that the job is completed
+                # Notify the seeker and process payouts
                 seeker = await UserRepository.get_user_by_id(job.accepted_by)
                 if seeker:
-
-                    # Check if seeker has a Stripe Connect account
-                    stripe_user = await StripeUserRepository.get_stripe_user_by_user_id(seeker.id)
+                    # Capture the payment
+                    captured_payment = await self.stripe_client.capture_payment(
+                        payment_intent_id=job.payment_intent,
+                        amount=job.amount,
+                        posting_fee=job.posting_fee,
+                        job_id=job.id
+                    )
 
                     # Step 1: Fetch or Create Stripe Connect Account
+                    stripe_user = await StripeUserRepository.get_stripe_user_by_user_id(seeker.id)
                     if not stripe_user:
                         # Create a new Stripe Connect account
                         connect_account = await self.stripe_client.create_connect_account()
-                        
+
                         # Save the account details in the database
                         await StripeUserRepository.create_stripe_user(
                             user_id=seeker.id,
@@ -1292,23 +1297,37 @@ class DialogflowController:
 
                     # Step 2: Check Account Setup Status
                     account_details = await self.stripe_client.get_connected_account(stripe_user_id)
+                    login_link = None
+
                     if account_details['payouts_enabled'] and account_details['requirements']['disabled_reason'] is None:
-                        # Fully set up account, generate login link
-                        login_link = self.stripe_client.create_login_link(stripe_user_id)
-                        link_url = login_link['url']
-                        link_message = "Access your Stripe Express Dashboard using this link:"
+                        # Fully set up account, create payout
+                        payout = await self.stripe_client.create_payout(
+                            account_id=stripe_user_id,
+                            amount=job.amount,
+                            job_id=job.id,
+                            posting_fee=job.posting_fee
+                        )
+                        payout_message = f"Payout of ${job.amount - job.posting_fee} has been initiated to your account. It may take 2-5 business days to reflect in your bank."
+
                     else:
                         # Account setup incomplete, generate setup (onboarding) link
                         setup_link = self.stripe_client.create_connect_account_link(account_id=stripe_user_id)
-                        link_url = setup_link['url']
-                        link_message = "Complete your Stripe account setup using this link:"
+                        payout_message = (
+                            "Complete your Stripe account setup to receive the payout. "
+                            f"Use this link: {setup_link['url']}"
+                        )
+
+                    # Generate a login link to manage their account
+                    login_link = self.stripe_client.create_login_link(stripe_user_id)
 
                     # Step 3: Notify the Seeker
                     notification_message_seeker = (
                         f"✅ The job ID #{job_id_padded} has been marked as completed by the poster. "
-                        f"Please check the job details for confirmation. "
-                        f"{link_message} {link_url}"
+                        f"{payout_message} "
                     )
+                    if login_link:
+                        notification_message_seeker += f"Manage your Stripe account here: {login_link['url']}"
+
                     buttons = [
                         {
                             "type": "reply",
@@ -1318,7 +1337,7 @@ class DialogflowController:
                             }
                         }
                     ]
-                    
+
                     interactive_message = await self.create_button_message(notification_message_seeker, buttons)
                     await self.whatsapp_client.send_whatsapp_message(seeker.phone_number, interactive_message, 'interactive')
 
@@ -1326,17 +1345,16 @@ class DialogflowController:
 
             elif job.accepted_by == user.id:
                 # User is the accepter, mark job as pending-review
-                update_job_data = {'status': 'pending-review'}  # Set to pending-review
+                update_job_data = {'status': 'pending-review'}
                 where_criteria = {"id": job_id}
                 await JobRepository.update_job(where_criteria, update_job_data)
 
                 # Notify the poster that the job is pending review
                 poster = await UserRepository.get_user_by_id(job.posted_by)
                 if poster:
-                    # Send notification to the poster
                     notification_message_poster = (
-                        f"🚀 *Attention!* Job ID #{job_id_padded} has been marked as pending review by {user.name} "
-                        f"(the accepter). Please review and mark it as complete."
+                        f"🚀 *Attention!* Job ID #{job_id_padded} has been marked as pending review by {user.name}. "
+                        f"Please review and mark it as complete."
                     )
                     buttons = [
                         {
@@ -1347,7 +1365,7 @@ class DialogflowController:
                             }
                         }
                     ]
-                    
+
                     interactive_message = await self.create_button_message(notification_message_poster, buttons)
                     await self.whatsapp_client.send_whatsapp_message(poster.phone_number, interactive_message, 'interactive')
 
