@@ -686,7 +686,7 @@ class DialogflowController:
             user = await UserRepository.get_user_by_phone_number(recipient_number)
             if not user:
                 return {"error": "User not found"}
-            print('user',user.id)
+            
             # Create job entry in the database
             job = await JobRepository.create_job(
                 job_description=job_description,

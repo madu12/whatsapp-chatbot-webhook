@@ -27,7 +27,7 @@ class UserRepository:
             user = session.query(User).filter(cast(User.phone_number, String) == encrypt_phone_number).first()
 
             if user:
-                decrypt_phone_number = utils.encrypt_aes(user.phone_number)
+                decrypt_phone_number = utils.decrypt_aes(user.phone_number)
                 user.phone_number = decrypt_phone_number
             
             return user
