@@ -1,5 +1,7 @@
 from config import STRIPE_SECRET_KEY, WEBSITE_URL
 import stripe
+from database.repositories import StripeUserRepository
+from utils.general_utils import GeneralUtils
 
 class StripeClient:
     def __init__(self):
@@ -84,4 +86,68 @@ class StripeClient:
             return checkout_session
         except stripe.error.StripeError as e:
             print(f"Error stripe create checkout session: {e.user_message}")
+            raise e
+
+    async def create_connect_account(self):
+        """
+        Create a Stripe Connect Express Account.
+
+        :return: Stripe Connect account object.
+        """
+        try:
+            connect_account = stripe.Account.create(
+                type='express',
+                country='US',
+                capabilities={
+                    'transfers': {'requested': True},
+                },
+            )
+            return connect_account
+        except stripe.error.StripeError as e:
+            print(f"Error in create_connect_account: {e.user_message}")
+            raise e
+        
+    def create_connect_account_link(self, account_id):
+        """
+        Create a Stripe Connect Account link.
+
+        :param account_id: Stripe account ID.
+        :return: Account link URL.
+        """
+        try:
+            utils = GeneralUtils()
+            encrypted_account_id = utils.encrypt_aes(account_id)
+            account_link = stripe.AccountLink.create(
+                account=account_id,
+                refresh_url=f"{self.website_url}/connected-account-verify?accountID={encrypted_account_id}",
+                return_url=f"{self.website_url}",
+                type="account_onboarding"
+            )
+            return account_link.url
+        except stripe.error.StripeError as e:
+            print(f"Error creating Stripe Connect Account link: {e.user_message}")
+            raise e
+
+    def verify_connected_account(self, encrypted_account_id):
+        """
+        Verify and handle a Stripe Connect Account using the encrypted account ID.
+
+        :param encrypted_account_id: Encrypted Stripe account ID.
+        :return: Redirect URL for the user.
+        """
+        try:
+            utils = GeneralUtils()
+            stripe_user_id = utils.decrypt_aes(encrypted_account_id)
+
+            # Check if the account exists in the database
+            existing_connect_account = StripeUserRepository.get_stripe_user_by_stripe_user_id(stripe_user_id)
+
+            if existing_connect_account:
+                # Create and return a new Connect Account onboarding link
+                return self.create_connect_account_link(stripe_user_id)
+            else:
+                # Redirect to the website homepage or another fallback URL
+                return self.website_url
+        except Exception as e:
+            print(f"Error verifying connected account: {e}")
             raise e

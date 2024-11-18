@@ -33,7 +33,8 @@ CLASSIFICATION_MODEL_API_URL = os.getenv("CLASSIFICATION_MODEL_API_URL")
 CLASSIFICATION_MODEL_API_KEY = os.getenv("CLASSIFICATION_MODEL_API_KEY")
 
 # Load Encryption Key
-ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
+AES_KEY = os.getenv("AES_KEY")
+AES_IV = os.getenv("AES_IV")
 
 # Ensure critical environment variables are loaded
 required_vars = [
@@ -46,7 +47,8 @@ required_vars = [
     STRIPE_SECRET_KEY,
     WEBSITE_URL,
     GOOGLE_MAPS_API_KEY,
-    ENCRYPTION_KEY,
+    AES_KEY,
+    AES_IV,
     CLASSIFICATION_MODEL_API_URL,
     CLASSIFICATION_MODEL_API_KEY
 ]
@@ -61,7 +63,8 @@ missing_vars = [var for var, value in zip([
     "STRIPE_SECRET_KEY",
     "WEBSITE_URL",
     "GOOGLE_MAPS_API_KEY",
-    "ENCRYPTION_KEY"
+    "AES_KEY",
+    "AES_IV",
     "CLASSIFICATION_MODEL_API_URL",
     "CLASSIFICATION_MODEL_API_KEY"
 ], required_vars) if not value]

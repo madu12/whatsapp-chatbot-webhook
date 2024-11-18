@@ -1,9 +1,13 @@
-from cryptography.fernet import Fernet
-from config import ENCRYPTION_KEY
+import os
+from base64 import b64decode, b64encode
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import padding
+from config import AES_KEY, AES_IV
 class GeneralUtils:
     def __init__(self):
-        self.encryption_key = ENCRYPTION_KEY
-        self.fernet = Fernet(self.encryption_key)
+        # Fetch and decode AES_KEY and AES_IV
+        self.aes_key = b64decode(AES_KEY)
+        self.aes_iv = b64decode(AES_IV)
 
     def get_address_index(self, address):
         """
@@ -24,34 +28,35 @@ class GeneralUtils:
 
         return address_index
 
-    def encrypt_data(self, data):
-        """
-        Encrypt data using AES encryption (Fernet).
+    def encrypt_aes(self, value):
+        """Encrypt a value."""
+        # Create AES cipher in CBC mode
+        cipher = Cipher(algorithms.AES(self.aes_key), modes.CBC(self.aes_iv))
+        encryptor = cipher.encryptor()
 
-        Args:
-            data (str): The data to encrypt.
+        # Pad the value to match AES block size
+        padder = padding.PKCS7(algorithms.AES.block_size).padder()
+        padded_data = padder.update(value.encode()) + padder.finalize()
 
-        Returns:
-            str: The encrypted data in base64 format.
-        """
-        if not isinstance(data, str):
-            raise ValueError("Data to be encrypted must be a string.")
-        
-        encrypted_data = self.fernet.encrypt(data.encode())
-        return encrypted_data
+        # Encrypt the padded data
+        encrypted_data = encryptor.update(padded_data) + encryptor.finalize()
+        # Return as Base64 string for storage
+        return b64encode(encrypted_data).decode('utf-8')
 
-    def decrypt_data(self, encrypted_data):
-        """
-        Decrypt data using AES encryption (Fernet).
+    def decrypt_aes(self, encrypted_value):
+        """Decrypt an encrypted value."""
+        # Convert Base64 string back to bytes
+        encrypted_data = b64decode(encrypted_value)
 
-        Args:
-            encrypted_data (str): The encrypted data in base64 format.
+        # Create AES cipher in CBC mode
+        cipher = Cipher(algorithms.AES(self.aes_key), modes.CBC(self.aes_iv))
+        decryptor = cipher.decryptor()
 
-        Returns:
-            str: The decrypted data.
-        """
-        if not isinstance(encrypted_data, str):
-            raise ValueError("Encrypted data must be a string.")
-        
-        decrypted_data = self.fernet.decrypt(encrypted_data)
+        # Decrypt the data
+        decrypted_padded_data = decryptor.update(encrypted_data) + decryptor.finalize()
+
+        # Remove padding to get the original data
+        unpadder = padding.PKCS7(algorithms.AES.block_size).unpadder()
+        decrypted_data = unpadder.update(decrypted_padded_data) + unpadder.finalize()
+
         return decrypted_data.decode()

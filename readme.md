@@ -69,7 +69,8 @@ WEBSITE_URL=your_website_url
 CLASSIFICATION_MODEL_API_URL=your_classification_model_api_url
 CLASSIFICATION_MODEL_API_KEY=your_classification_model_api_key
 GOOGLE_MAPS_API_KEY=your_google_maps_api_key
-ENCRYPTION_KEY=your_encryption_key
+AES_KEY=this_is_a_32_byte_secure_key # Must be 32 bytes for AES-256
+AES_IV=this_is_16_bytes # Must be 16 bytes for AES-CBC
 ```
 
 ### Database Setup
@@ -81,9 +82,10 @@ BEGIN
     CREATE TABLE users (
         id INT IDENTITY(1,1) PRIMARY KEY,
         name NVARCHAR(255) NOT NULL,
-        phone_number TEXT NOT NULL UNIQUE,
+        phone_number TEXT NULL,
         created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(),
-        updated_at DATETIMEOFFSET
+        updated_at DATETIMEOFFSET,
+        deleted_at DATETIMEOFFSET NULL
     );
 END;
 
@@ -102,13 +104,15 @@ IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='addresses' AND xtype='U')
 BEGIN
     CREATE TABLE addresses (
         id INT IDENTITY(1,1) PRIMARY KEY,
-        street NVARCHAR(255),
+        street NVARCHAR(255) NULL,
         city NVARCHAR(255) NOT NULL,
         state NVARCHAR(255) NOT NULL,
         zip_code NVARCHAR(10) NOT NULL,
         country NVARCHAR(255) NOT NULL DEFAULT 'USA',
-        address_index VARCHAR(255) NOT NULL,
-        user_id INT NOT NULL FOREIGN KEY REFERENCES users(id)
+        address_index NVARCHAR(255) NULL,
+        is_active NVARCHAR(10) DEFAULT 'true',
+        user_id INT NOT NULL FOREIGN KEY REFERENCES users(id),
+        CONSTRAINT chk_valid_zip CHECK (zip_code LIKE '[0-9][0-9][0-9][0-9][0-9]')
     );
     CREATE INDEX idx_address_index ON addresses(address_index);
 END;
@@ -122,18 +126,19 @@ BEGIN
         category_id INT NOT NULL FOREIGN KEY REFERENCES categories(id),
         date_time DATETIMEOFFSET NOT NULL,
         amount DECIMAL(10,2) NOT NULL,
-        posting_fee DECIMAL(10,2),
+        posting_fee DECIMAL(10,2) NULL,
         zip_code NVARCHAR(10) NOT NULL,
         posted_by INT NOT NULL FOREIGN KEY REFERENCES users(id),
-        accepted_by INT FOREIGN KEY REFERENCES users(id),
-        payment_id NVARCHAR(255),
-        status NVARCHAR(255) DEFAULT 'pending',
-        payment_status NVARCHAR(255) DEFAULT 'unpaid',
-        address_id INT FOREIGN KEY REFERENCES addresses(id),
-        payment_intent NVARCHAR(255),
-        payment_transfer_id NVARCHAR(255),
+        accepted_by INT NULL FOREIGN KEY REFERENCES users(id),
+        payment_id NVARCHAR(255) NULL,
+        status NVARCHAR(255) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'posted', 'accepted', 'completed', 'canceled', 'deleted')),
+        payment_status NVARCHAR(255) NOT NULL DEFAULT 'unpaid' CHECK (payment_status IN ('unpaid', 'authorized', 'paid', 'refunded')),
+        address_id INT NULL FOREIGN KEY REFERENCES addresses(id),
+        payment_intent NVARCHAR(255) NULL,
+        payment_transfer_id NVARCHAR(255) NULL,
         created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(),
-        updated_at DATETIMEOFFSET
+        updated_at DATETIMEOFFSET,
+        deleted_at DATETIMEOFFSET NULL
     );
     CREATE INDEX idx_job_status ON jobs(status);
     CREATE INDEX idx_job_date_time ON jobs(date_time);
@@ -145,12 +150,23 @@ IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='chat_sessions' AND xtype='U'
 BEGIN
     CREATE TABLE chat_sessions (
         id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
-        job_id INT FOREIGN KEY REFERENCES jobs(id),
-        job_type NVARCHAR(255),
+        job_id INT NULL FOREIGN KEY REFERENCES jobs(id),
+        job_type NVARCHAR(255) NULL,
         user_id INT NOT NULL FOREIGN KEY REFERENCES users(id),
-        created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET()
+        created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(),
+        deleted_at DATETIMEOFFSET NULL
     );
     CREATE INDEX idx_chat_session_id ON chat_sessions(id);
+END;
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='stripe_users' AND xtype='U')
+BEGIN
+    CREATE TABLE stripe_users (
+        id INT IDENTITY(1,1) PRIMARY KEY,
+        user_id INT NOT NULL FOREIGN KEY REFERENCES users(id),
+        stripe_user_id NVARCHAR(255) NOT NULL,
+        created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(),
+        updated_at DATETIMEOFFSET
+    );
 END;
 ```
 

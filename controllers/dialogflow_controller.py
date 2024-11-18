@@ -1,10 +1,10 @@
 from clients.dialogflow_client import DialogflowClient
 import datetime
 from clients.whatsapp_client import WhatsAppClient
-from database.repositories import AddressRepository, ChatSessionRepository, JobRepository, CategoryRepository, UserRepository
+from database.repositories import AddressRepository, ChatSessionRepository, JobRepository, CategoryRepository, StripeUserRepository, UserRepository
 from clients.stripe_client import StripeClient
 import requests
-from config import GOOGLE_MAPS_API_KEY, CLASSIFICATION_MODEL_API_URL, CLASSIFICATION_MODEL_API_KEY
+from config import GOOGLE_MAPS_API_KEY, CLASSIFICATION_MODEL_API_URL, CLASSIFICATION_MODEL_API_KEY, WEBSITE_URL
 from asgiref.sync import sync_to_async
 import logging
 
@@ -18,6 +18,7 @@ class DialogflowController:
         self.dialogflow_client = DialogflowClient()
         self.stripe_client = StripeClient()
         self.api_key = GOOGLE_MAPS_API_KEY
+        self.website_url = WEBSITE_URL
 
     async def handle_message(self, sender_message, recipient_number, chat_session_id=None):
         """
@@ -353,17 +354,17 @@ class DialogflowController:
             ml_response = await self.get_job_category(json_parameters["job_description"])
             if ml_response:
                 category = ml_response.get('category')
-                suggested_by_gemini = ml_response.get('suggested_by_gemini')
-                verification_status_by_gemini = ml_response.get('verification_status_by_gemini', 'incorrect').lower()
+                suggested_by_gen_ai = ml_response.get('suggested_by_gen_ai')
+                verification_status_by_gen_ai = ml_response.get('verification_status_by_gen_ai', 'incorrect').lower()
 
-                # Normalize category and suggested_by_gemini to capitalize for display
+                # Normalize category and suggested_by_gen_ai to capitalize for display
                 if category:
                     category = category.capitalize()
-                if suggested_by_gemini:
-                    suggested_by_gemini = suggested_by_gemini.capitalize()
+                if suggested_by_gen_ai:
+                    suggested_by_gen_ai = suggested_by_gen_ai.capitalize()
 
                 # Case 1: ML model returns one category or both categories are the same
-                if category and (not suggested_by_gemini or category == suggested_by_gemini):
+                if category and (not suggested_by_gen_ai or category == suggested_by_gen_ai):
                     if json_parameters["job_type"]:
                         if json_parameters["job_type"] == 'post_job':
                             response_message = (
@@ -393,43 +394,59 @@ class DialogflowController:
                         json_parameters["category_predicted"] = "single"
                         return await self.webhook_response(None, payload_response, json_parameters)
 
-                # Case 2: Gemini verification suggests a different category and verification_status_by_gemini is incorrect
-                elif verification_status_by_gemini == 'incorrect' and suggested_by_gemini and suggested_by_gemini != 'None':
+                # Case 2: GenAI verification suggests a different category and verification_status_by_gen_ai is incorrect
+                elif verification_status_by_gen_ai == 'incorrect' and suggested_by_gen_ai and suggested_by_gen_ai != 'None':
                     if json_parameters["job_type"] != 'None':
                         if json_parameters["job_type"] == 'post_job':
                             response_message = (
-                                f"We recommend posting your job under the *'{suggested_by_gemini}'* category. "
+                                f"We recommend posting your job under the *'{suggested_by_gen_ai}'* category. "
                                 "Please confirm if this is correct."
                             )
+                            payload_response = {
+                                "richContent": [
+                                    {"text": response_message},
+                                    {
+                                        "type": "chips",
+                                        "options": [
+                                            {"text": "Yes"},
+                                            {"text": "No"}
+                                        ]
+                                    }
+                                ]
+                            }
+                            json_parameters["job_category"] = suggested_by_gen_ai
+                            json_parameters["category_predicted"] = "single"
+                            return await self.webhook_response(None, payload_response, json_parameters)
+
 
                         if json_parameters["job_type"] == 'find_job':
                             response_message = (
-                                f"We recommend finding your job under the *'{suggested_by_gemini}'* category. "
+                                f"We recommend finding your job under the *'{suggested_by_gen_ai}'* category. "
                                 "Please confirm if this is correct."
                             )
 
-                    payload_response = {
-                        "richContent": [
-                            {"text": response_message},
-                            {
-                                "type": "chips",
-                                "options": [
-                                    {"text": "Yes"},
-                                    {"text": "No"}
+                            payload_response = {
+                                "richContent": [
+                                    {"text": response_message},
+                                    {
+                                        "type": "chips",
+                                        "options": [
+                                            {"text": "Yes"},
+                                            {"text": "No"}
+                                        ]
+                                    }
                                 ]
                             }
-                        ]
-                    }
-                    json_parameters["job_category"] = suggested_by_gemini
-                    json_parameters["category_predicted"] = "single"
-                    return await self.webhook_response(None, payload_response, json_parameters)
+                            json_parameters["job_category"] = suggested_by_gen_ai
+                            json_parameters["category_predicted"] = "single"
+                            return await self.webhook_response(None, payload_response, json_parameters)
 
-                # Case 3: ML model returns multiple suggestions and verification_status_by_gemini is correct
-                elif category and suggested_by_gemini and suggested_by_gemini != 'None' and verification_status_by_gemini == 'correct':
+                # Case 3: ML model returns multiple suggestions and verification_status_by_gen_ai is correct
+                elif category and suggested_by_gen_ai and suggested_by_gen_ai != 'None' and verification_status_by_gen_ai == 'correct':
                     response_message = (
                         f"We have detected multiple categories for your job:\n"
                         f"🔹 {category}\n"
-                        f"🔹 {suggested_by_gemini}\n\n"
+                        f"🔹 {suggested_by_gen_ai}\n\n"
                         "Please confirm the category you prefer."
                     )
 
@@ -440,7 +457,7 @@ class DialogflowController:
                                 "type": "chips",
                                 "options": [
                                     {"text": category},
-                                    {"text": suggested_by_gemini},
+                                    {"text": suggested_by_gen_ai},
                                 ]
                             }
                         ]
@@ -448,8 +465,8 @@ class DialogflowController:
                     json_parameters["category_predicted"] = "multiple"
                     return await self.webhook_response(None, payload_response, json_parameters)
 
-                # Case 4: Gemini verification suggests 'none' as category
-                elif verification_status_by_gemini == 'incorrect' and suggested_by_gemini == 'None':
+                # Case 4: GenAI verification suggests 'none' as category
+                elif verification_status_by_gen_ai == 'incorrect' and suggested_by_gen_ai == 'None':
                     json_parameters["category_predicted"] = "zero"
                     return await self.webhook_response(None, None, json_parameters)
 
@@ -669,7 +686,7 @@ class DialogflowController:
             user = await UserRepository.get_user_by_phone_number(recipient_number)
             if not user:
                 return {"error": "User not found"}
-
+            print('user',user.id)
             # Create job entry in the database
             job = await JobRepository.create_job(
                 job_description=job_description,
@@ -1243,10 +1260,29 @@ class DialogflowController:
                 # Notify the seeker that the job is completed
                 seeker = await UserRepository.get_user_by_id(job.accepted_by)
                 if seeker:
+
+                    # Check if seeker has a Stripe Connect account
+                    stripe_user = await StripeUserRepository.get_stripe_user_by_user_id(seeker.id)
+                    if not stripe_user:
+                        # Create a Stripe Connect account
+                        connect_account = await self.stripe_client.create_connect_account()
+                        
+                        # Save the new Stripe Connect account to the database
+                        await StripeUserRepository.create_stripe_user(
+                            user_id=seeker.id,
+                            stripe_user_id=connect_account['id']
+                        )
+
+                    # Generate a Connect Account link
+                    connect_account_link = await self.stripe_client.create_connect_account_link(
+                        stripe_user_id=stripe_user.stripe_user_id,
+                        redirect_url=self.website_url
+                    )
                     # Sending notification to the seeker
                     notification_message_seeker = (
                         f"✅ The job ID #{job_id_padded} has been marked as completed by the poster. "
-                        f"Please check the job details for confirmation."
+                        f"Please check the job details for confirmation. "
+                        f"You can manage your payout settings using this link: {connect_account_link}"
                     )
                     buttons = [
                         {

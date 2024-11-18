@@ -1,7 +1,9 @@
+from datetime import datetime, timezone
+import logging
 import uuid
 from clients.whatsapp_client import WhatsAppClient
 from controllers.dialogflow_controller import DialogflowController
-from database.repositories import JobRepository, UserRepository, ChatSessionRepository
+from database.repositories import JobRepository, UserRepository, ChatSessionRepository, AddressRepository
 from config import WEBSITE_URL
 
 class WhatsAppController:
@@ -55,6 +57,14 @@ class WhatsAppController:
             
             if recipient_message.lower() == "hi":
                 await self.welcome_msg(recipient_number, recipient_name)
+                return
+            
+            if recipient_message.lower() == "delete account":
+                await self.handle_delete_account_request(recipient_number)
+                return
+            
+            if recipient_message.lower() == "confirm delete":
+                await self.handle_confirm_delete(recipient_number)
                 return
 
             if recipient_message.lower() in post_job_phrases + find_job_phrases + mark_complete_phrases:
@@ -116,6 +126,10 @@ class WhatsAppController:
                 if chat_session:
                     chat_session_id = str(chat_session.id)
                     self.sessions[recipient_number] = chat_session_id
+                else:
+                    chat_session_id = str(uuid.uuid4())
+                    self.sessions[recipient_number] = chat_session_id
+                    chat_session = await ChatSessionRepository.create_chat_session(chat_session_id, "Post Job", user.id)
 
             dialogflow_response = await self.dialogflow_controller.handle_message(recipient_message, recipient_number, chat_session_id)
             if dialogflow_response:
@@ -599,3 +613,229 @@ class WhatsAppController:
             print(f"Error finding jobs for user: {e}")
             await self.send_error_message(recipient_number)
 
+    async def handle_delete_account_request(self, recipient_number):
+        """
+        Handle the user's request to delete their account.
+
+        Args:
+            recipient_number (str): The phone number of the recipient.
+        """
+        try:
+            # Verify if the user exists in the database
+            user = await UserRepository.get_user_by_phone_number(recipient_number)
+            if not user:
+                await self.whatsapp_client.send_whatsapp_message(
+                    recipient_number,
+                    "Your account could not be found. If you believe this is an error, please contact support.",
+                    "text"
+                )
+                return
+            
+            # Send acknowledgment and ask for confirmation
+            buttons = [
+                {"type": "reply", "reply": {"id": "Confirm Delete", "title": "Confirm Delete"}},
+                {"type": "reply", "reply": {"id": "Cancel", "title": "Cancel"}}
+            ]
+            response_message = (
+                "⚠️ *Account Deletion Request*\n\n"
+                "You have requested to delete your account. This action is irreversible. All your data, "
+                "including posted jobs, accepted jobs, and payment details, will be permanently deleted.\n\n"
+                "If you wish to proceed, please confirm by clicking 'Confirm Delete' below."
+            )
+            interactive_message = await self.dialogflow_controller.create_button_message(response_message, buttons)
+            await self.whatsapp_client.send_whatsapp_message(recipient_number, interactive_message, "interactive")
+        except Exception as e:
+            logging.error(f"Error handling delete account request for {recipient_number}: {e}")
+            await self.send_error_message(recipient_number)
+
+    async def handle_confirm_delete(self, recipient_number):
+        """
+        Handle the user's request to delete their account under CCPA and GDPR compliance.
+
+        Args:
+            recipient_number (str): The phone number of the recipient.
+        """
+        try:
+            # Verify the user exists
+            user = await UserRepository.get_user_by_phone_number(recipient_number)
+            if not user:
+                await self.whatsapp_client.send_whatsapp_message(
+                    recipient_number,
+                    "Your account could not be found. Please contact support if you believe this is an error.",
+                    "text"
+                )
+                return
+
+            # Notify the user that the deletion process has started
+            progress_message = (
+                "🚨 *Account Deletion in Progress* 🚨\n\n"
+                "We have received your request to delete your account. This process may take a few moments.\n\n"
+                "⚙️ What’s happening:\n"
+                "1️⃣ Anonymizing your information.\n"
+                "2️⃣ Notifying impacted users.\n"
+                "3️⃣ Finalizing the process.\n\n"
+                "✨ *You will receive a confirmation shortly!* ✨"
+            )
+            await self.whatsapp_client.send_whatsapp_message(
+                recipient_number,
+                progress_message,
+                "text"
+            )
+
+            # Perform the deletion steps
+            deletion_success = True
+            try:
+                await self.anonymize_user_data(user)
+                await self.notify_affected_users(user)
+                await self.log_deletion_request(user)
+            except Exception as deletion_error:
+                deletion_success = False
+                logging.error(f"Error during account deletion for user {user.id}: {deletion_error}")
+
+            # Confirm deletion completion only if all steps succeeded
+            if deletion_success:
+                completion_message = (
+                    "✅ *Account Deletion Completed* ✅\n\n"
+                    "Your account and all associated data have been successfully deleted. Thank you for being a part of our journey! 🌟\n\n"
+                    "💬 *We’re always here to help if you decide to return.* Feel free to reach out anytime.\n\n"
+                )
+                await self.whatsapp_client.send_whatsapp_message(
+                    recipient_number,
+                    completion_message,
+                    "text"
+                )
+            else:
+                error_message = (
+                    "⚠️ An error occurred while processing your deletion request. "
+                    "Please contact support for assistance. 🛡️"
+                )
+                await self.whatsapp_client.send_whatsapp_message(
+                    recipient_number,
+                    error_message,
+                    "text"
+                )
+
+        except Exception as e:
+            logging.error(f"Error handling confirm delete for recipient {recipient_number}: {e}")
+            await self.whatsapp_client.send_whatsapp_message(
+                recipient_number,
+                "⚠️ An unexpected error occurred. Please contact support for assistance.",
+                "text"
+            )
+
+    async def anonymize_user_data(self, user):
+        """
+        Anonymize user and related data for compliance.
+
+        Args:
+            user (User): The user object to anonymize.
+        """
+        try:
+            # Step 1: Anonymize user record
+            await UserRepository.update_user(
+                user_id=user.id,
+                update_data={
+                    "name": "Deleted User",
+                    "phone_number": None,
+                    "deleted_at": datetime.now(timezone.utc),
+                }
+            )
+
+            # Step 2: Anonymize user addresses
+            await AddressRepository.update_address(
+                where_criteria={"user_id": user.id},
+                update_data={
+                    "street": 'Deleted Address',
+                    "city": "Deleted City",
+                    "state": "XX",
+                    "zip_code": "00000",
+                    "is_active": "false"
+                }
+            )
+
+            # Step 3: Soft delete chat sessions
+            await ChatSessionRepository.update_chat_sessions(
+                where_criteria={"user_id": user.id},
+                update_data={"deleted_at": datetime.now(timezone.utc)}
+            )
+
+            # Step 4: Handle jobs posted by the user
+            posted_jobs = await JobRepository.find_all_jobs_with_conditions(
+                conditions={"posted_by": user.id},
+                order=[("id", "asc")]
+            )
+            for job in posted_jobs:
+                if job.status in ["pending", "posted", "accepted"]:
+                    await JobRepository.update_job(
+                        where={"id": job.id},
+                        update_data={"status": "deleted", "deleted_at": datetime.now(timezone.utc)}
+                    )
+
+            # Step 5: Handle jobs accepted by the user
+            accepted_jobs = await JobRepository.find_all_jobs_with_conditions(
+                conditions={"accepted_by": user.id},
+                order=[("id", "asc")]
+            )
+            for job in accepted_jobs:
+                await JobRepository.update_job(
+                    where={"id": job.id},
+                    update_data={"accepted_by": None, "status": "pending"}
+                )
+        except Exception as e:
+            logging.error(f"Error anonymizing user data: {e}")
+            raise e
+
+    async def notify_affected_users(self, user):
+        """
+        Notify users affected by the account deletion.
+
+        Args:
+            user (User): The user object whose deletion affects other users.
+        """
+        try:
+            # Step 1: Notify job seekers
+            posted_jobs = await JobRepository.find_all_jobs_with_conditions(
+                conditions={"posted_by": user.id},
+                order=[("id", "asc")]
+            )
+            for job in posted_jobs:
+                if job.accepted_by:
+                    seeker = await UserRepository.get_user_by_id(job.accepted_by)
+                    if seeker:
+                        await self.whatsapp_client.send_whatsapp_message(
+                            seeker.phone_number,
+                            f"⚠️ The job ID #{job.id} has been canceled due to the poster's account deletion.",
+                            "text"
+                        )
+
+            # Step 2: Notify job posters
+            accepted_jobs = await JobRepository.find_all_jobs_with_conditions(
+                conditions={"accepted_by": user.id},
+                order=[("id", "asc")]
+            )
+            for job in accepted_jobs:
+                poster = await UserRepository.get_user_by_id(job.posted_by)
+                if poster:
+                    await self.whatsapp_client.send_whatsapp_message(
+                        poster.phone_number,
+                        f"⚠️ The job ID #{job.id} has been marked as available due to the acceptor's account deletion.",
+                        "text"
+                    )
+        except Exception as e:
+            logging.error(f"Error notifying affected users: {e}")
+            raise e
+
+    async def log_deletion_request(self, user):
+        """
+        Log the account deletion request for audit purposes.
+
+        Args:
+            user (User): The user object being deleted.
+        """
+        try:
+            logging.info(
+                f"📝 User ID {user.id} ('{user.name}') account deletion processed successfully at {datetime.now(timezone.utc)}."
+            )
+        except Exception as e:
+            logging.error(f"Error logging deletion request: {e}")
+            raise e

@@ -1,7 +1,7 @@
 import datetime
 from sqlalchemy import asc, desc, select, cast, String
 from sqlalchemy.orm import joinedload
-from database.models import User, Job, Category, ChatSession, Address
+from database.models import User, Job, Category, ChatSession, Address, StripeUser
 from database.db_session import create_session
 from sqlalchemy.exc import SQLAlchemyError
 from utils.general_utils import GeneralUtils
@@ -23,11 +23,12 @@ class UserRepository:
         try:
             session = create_session()
             utils = GeneralUtils()
-            # encrypted_phone_number = utils.encrypt_data(phone_number)
-            user = session.query(User).filter(cast(User.phone_number, String) == phone_number).first()
+            encrypt_phone_number = utils.encrypt_aes(phone_number)
+            user = session.query(User).filter(cast(User.phone_number, String) == encrypt_phone_number).first()
 
-            # if user:
-            #     user.phone_number = utils.decrypt_data(user.phone_number)
+            if user:
+                decrypt_phone_number = utils.encrypt_aes(user.phone_number)
+                user.phone_number = decrypt_phone_number
             
             return user
         except SQLAlchemyError as e:
@@ -49,10 +50,10 @@ class UserRepository:
             session = create_session()
             utils = GeneralUtils()
             user = session.query(User).filter(User.id == user_id).first()
-        
-            # if user:
-            #     # Decrypt the phone number before returning
-            #     user.phone_number = utils.decrypt_data(user.phone_number)
+
+            if user:
+                decrypt_phone_number = utils.decrypt_aes(user.phone_number)
+                user.phone_number = decrypt_phone_number
             
             return user
         except SQLAlchemyError as e:
@@ -74,18 +75,47 @@ class UserRepository:
         try:
             session = create_session()
             utils = GeneralUtils()
-            # encrypted_phone_number = utils.encrypt_data(phone_number)
-            user = User(name=name, phone_number=phone_number)
+            encrypt_phone_number = utils.encrypt_aes(phone_number)
+            user = User(name=name, phone_number=encrypt_phone_number)
             session.add(user)
             session.commit()
             session.refresh(user)
-            # user.phone_number = phone_number
+            user.phone_number = phone_number
             return user
         except SQLAlchemyError as e:
             print(f"Error creating user: {e}")
             session.rollback()
             return None
 
+    @staticmethod
+    async def update_user(user_id, update_data):
+        """
+        Update a user's details.
+
+        Args:
+            user_id (int): The ID of the user to update.
+            update_data (dict): A dictionary of fields to update.
+
+        Returns:
+            User: The updated user object, or None if the update failed.
+        """
+        try:
+            session = create_session()
+            user = session.query(User).filter(User.id == user_id).first()
+            if not user:
+                return None
+
+            # Update the fields provided in the update_data dictionary
+            for key, value in update_data.items():
+                setattr(user, key, value)
+
+            session.commit()
+            session.refresh(user)
+            return user
+        except SQLAlchemyError as e:
+            session.rollback()
+            print(f"Error updating user: {e}")
+            return None
 class ChatSessionRepository:
     @staticmethod
     async def create_chat_session(chat_session_id, job_type, user_id):
@@ -153,7 +183,42 @@ class ChatSessionRepository:
             print(f"Error updating chat session job ID: {e}")
             session.rollback()
             return None
+    
+    @staticmethod
+    async def update_chat_sessions(where_criteria: dict, update_data: dict):
+        """
+        Update an chat_session based on criteria.
 
+        Args:
+            where_criteria (dict): The filter criteria for selecting the chat_session.
+            update_data (dict): A dictionary with fields to update.
+
+        Returns:
+            ChatSession: The updated chat_session object if successful, else None.
+        """
+        try:
+            session = create_session()
+            query = session.query(ChatSession)
+
+            # Apply filters from the 'where_criteria' dictionary
+            for key, value in where_criteria.items():
+                query = query.filter(getattr(ChatSession, key) == value)
+
+            chat_session = query.first()
+            if not chat_session:
+                return None
+
+            # Update chat_session fields dynamically
+            for key, value in update_data.items():
+                setattr(chat_session, key, value)
+
+            session.commit()
+            session.refresh(chat_session)
+            return chat_session
+        except SQLAlchemyError as e:
+            print(f"Error updating chat_session: {e}")
+            session.rollback()
+            return None
 class CategoryRepository:
     @staticmethod
     async def get_category_by_name(category_name):
@@ -284,7 +349,7 @@ class JobRepository:
             return None
 
     @staticmethod
-    async def find_all_jobs_with_conditions(conditions, order, limit=5):
+    async def find_all_jobs_with_conditions(conditions, order, limit=10):
         """
         Find all jobs based on conditions.
 
@@ -419,3 +484,154 @@ class AddressRepository:
         except SQLAlchemyError as e:
             print(f"Error retrieving address by ID: {e}")
             return None
+        
+    @staticmethod
+    async def update_address(where_criteria: dict, update_data: dict):
+        """
+        Update an address based on criteria.
+
+        Args:
+            where_criteria (dict): The filter criteria for selecting the address.
+            update_data (dict): A dictionary with fields to update.
+
+        Returns:
+            Address: The updated address object if successful, else None.
+        """
+        try:
+            session = create_session()
+            query = session.query(Address)
+
+            # Apply filters from the 'where_criteria' dictionary
+            for key, value in where_criteria.items():
+                query = query.filter(getattr(Address, key) == value)
+
+            address = query.first()
+            if not address:
+                return None
+
+            # Update address fields dynamically
+            for key, value in update_data.items():
+                setattr(address, key, value)
+
+            session.commit()
+            session.refresh(address)
+            return address
+        except SQLAlchemyError as e:
+            print(f"Error updating address: {e}")
+            session.rollback()
+            return None
+        
+class StripeUserRepository:
+    @staticmethod
+    async def create_stripe_user(user_id, stripe_user_id):
+        """
+        Create a StripeUser entry.
+
+        Args:
+            user_id (int): The ID of the user.
+            stripe_user_id (str): The Stripe user ID.
+
+        Returns:
+            StripeUser: The created StripeUser object.
+        """
+        try:
+            session = create_session()
+            stripe_user = StripeUser(
+                user_id=user_id,
+                stripe_user_id=stripe_user_id
+            )
+            session.add(stripe_user)
+            session.commit()
+            session.refresh(stripe_user)
+            return stripe_user
+        except SQLAlchemyError as e:
+            session.rollback()
+            print(f"Error creating StripeUser: {e}")
+            return None
+
+    @staticmethod
+    async def get_stripe_user_by_user_id(user_id):
+        """
+        Retrieve a StripeUser by the user ID.
+
+        Args:
+            user_id (int): The ID of the user.
+
+        Returns:
+            StripeUser: The StripeUser object if found, else None.
+        """
+        try:
+            session = create_session()
+            return session.query(StripeUser).filter_by(user_id=user_id).first()
+        except SQLAlchemyError as e:
+            print(f"Error retrieving StripeUser by user ID: {e}")
+            return None
+        
+    @staticmethod
+    async def get_stripe_user_by_stripe_user_id(stripe_user_id):
+        """
+        Retrieve a StripeUser by the Stripe user ID.
+
+        Args:
+            stripe_user_id (str): The Stripe user ID.
+
+        Returns:
+            StripeUser: The StripeUser object if found, else None.
+        """
+        try:
+            session = create_session()
+            return session.query(StripeUser).filter_by(stripe_user_id=stripe_user_id).first()
+        except SQLAlchemyError as e:
+            print(f"Error retrieving StripeUser by Stripe user ID: {e}")
+            return None
+
+
+        """
+        Update a StripeUser entry.
+
+        Args:
+            user_id (int): The ID of the user.
+            update_data (dict): A dictionary with the fields to update.
+
+        Returns:
+            StripeUser: The updated StripeUser object.
+        """
+        try:
+            session = create_session()
+            stripe_user = session.query(StripeUser).filter_by(user_id=user_id).first()
+            if not stripe_user:
+                return None
+
+            for key, value in update_data.items():
+                setattr(stripe_user, key, value)
+
+            session.commit()
+            session.refresh(stripe_user)
+            return stripe_user
+        except SQLAlchemyError as e:
+            session.rollback()
+            print(f"Error updating StripeUser: {e}")
+            return None
+
+        """
+        Delete a StripeUser entry.
+
+        Args:
+            user_id (int): The ID of the user.
+
+        Returns:
+            bool: True if deletion was successful, False otherwise.
+        """
+        try:
+            session = create_session()
+            stripe_user = session.query(StripeUser).filter_by(user_id=user_id).first()
+            if not stripe_user:
+                return False
+
+            session.delete(stripe_user)
+            session.commit()
+            return True
+        except SQLAlchemyError as e:
+            session.rollback()
+            print(f"Error deleting StripeUser: {e}")
+            return False

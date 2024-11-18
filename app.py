@@ -5,6 +5,8 @@ from flask import Flask, jsonify, request, render_template, redirect,url_for, ma
 from controllers.whatsapp_controller import WhatsAppController
 from clients.whatsapp_client import WhatsAppClient
 from controllers.dialogflow_controller import DialogflowController
+from clients.stripe_client import StripeClient
+
 from config import WHATSAPP_VERIFY_TOKEN,  STRIPE_SECRET_KEY
 
 app = Flask(__name__, static_folder='assets')
@@ -15,6 +17,7 @@ stripe.api_key = STRIPE_SECRET_KEY
 whatsapp_controller = WhatsAppController()
 dialogflow_controller = DialogflowController()
 whatsapp_client = WhatsAppClient()
+stripe_client = StripeClient()
 
 # In-memory store for processed message IDs
 processed_message_ids = set()
@@ -158,6 +161,24 @@ def documentation_index():
     """
     return render_template("docs/index.html")
 
+@app.route("/connected-account-verify", methods=["GET"])
+def connected_account_verify():
+    """
+    Endpoint to verify a connected account.
+
+    :return: Redirect URL for the user.
+    """
+    account_id = request.args.get("accountID")
+    if not account_id:
+        return jsonify({"error": "Missing accountID"}), 400
+
+    try:
+        redirect_url = stripe_client.verify_connected_account(account_id)
+        return redirect(redirect_url)
+    except Exception as e:
+        print(f"Error verifying connected account: {e}")
+        return jsonify({"error": "Internal Server Error"}), 500
+    
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True, use_reloader=True)
