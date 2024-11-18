@@ -1047,7 +1047,19 @@ class DialogflowController:
                     f"🚀 Your job ID #{job_id_padded} has been accepted by {user.name}. "
                     "They'll arrive at the scheduled time. Get ready!"
                 )
-                await self.whatsapp_client.send_whatsapp_message(poster.phone_number, notification_message_poster, 'text')
+
+                buttons = [
+                    {
+                        "type": "reply",
+                        "reply": {
+                            "id": f"Mark #{job_id_padded} as Completed",
+                            "title": f"Mark #{job_id_padded} as Completed"
+                        }
+                    }
+                ]
+                
+                interactive_message = await self.create_button_message(notification_message_poster, buttons)
+                await self.whatsapp_client.send_whatsapp_message(poster.phone_number, interactive_message, 'interactive')
 
             payload_response = {
                 "richContent": [
