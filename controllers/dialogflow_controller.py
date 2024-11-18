@@ -1280,19 +1280,14 @@ class DialogflowController:
                         connect_account = await self.stripe_client.create_connect_account()
                         
                         # Save the new Stripe Connect account to the database
-                        await StripeUserRepository.create_stripe_user(
+                        stripe_user = await StripeUserRepository.create_stripe_user(
                             user_id=seeker.id,
                             stripe_user_id=connect_account['id']
                         )
-                        stripe_user_id=connect_account['id']
-                    else:
-                        stripe_user_id=stripe_user.stripe_user_id
 
-                    await self.whatsapp_client.send_whatsapp_message(seeker.phone_number, f"User found: {stripe_user_id}", 'text')
                     # Generate a Connect Account link
                     connect_account_link = await self.stripe_client.create_connect_account_link(
-                        stripe_user_id=stripe_user_id,
-                        redirect_url=self.website_url
+                        stripe_user_id=stripe_user.stripe_user_id,
                     )
                     # Sending notification to the seeker
                     notification_message_seeker = (
