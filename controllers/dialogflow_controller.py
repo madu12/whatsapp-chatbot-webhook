@@ -353,6 +353,7 @@ class DialogflowController:
 
             # Call the ML model to get category suggestions
             ml_response = await self.get_job_category(json_parameters["job_description"])
+            print(ml_response)
             if ml_response:
                 category = ml_response.get('category')
                 suggested_by_gen_ai = ml_response.get('suggested_by_gen_ai')
@@ -874,7 +875,15 @@ class DialogflowController:
                 return await self.webhook_response(None, payload_response, json_parameters)
 
             # No jobs found
-            summary_text = "Unfortunately, we currently do not have any jobs that match the criteria entered. Please adjust your criteria."
+            summary_text = (
+                f"We did not find any jobs for "
+                f"{job_category if job_category else 'any category'}"
+                f"{f' on {job_date["month"]}/{job_date["day"]}/{job_date["year"]}' if job_date else ''}"
+                f"{f' at {job_time["hours"]}:{job_time["minutes"]}' if job_time else ''}"
+                f"{f' in ZIP Code {job_zip_code}' if job_zip_code else ''}"
+                f"{f' for an amount of ${amount.get("amount")}' if amount and amount.get('amount') else ''}. "
+                f"Please adjust your criteria."
+            )
             if json_parameters is None:
                 json_parameters = {}
             json_parameters["is_found_jobs"] = 'No'
