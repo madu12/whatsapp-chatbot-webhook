@@ -1052,8 +1052,8 @@ class DialogflowController:
                     {
                         "type": "reply",
                         "reply": {
-                            "id": f"Mark #{job_id_padded} as Completed",
-                            "title": f"Mark #{job_id_padded} as Completed"
+                            "id": f"Mark Job #{job_id_padded} as Completed",
+                            "title": f"Mark Job #{job_id_padded} as Completed"
                         }
                     }
                 ]
