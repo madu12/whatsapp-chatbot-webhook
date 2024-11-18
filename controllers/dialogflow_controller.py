@@ -1311,7 +1311,7 @@ class DialogflowController:
 
                     interactive_message = await self.create_button_message(notification_message_seeker, buttons)
                     await self.whatsapp_client.send_whatsapp_message(seeker.phone_number, interactive_message, 'interactive')
-                    
+
                 return await self.webhook_response(f"✅ Job ID #{job_id_padded} has been marked as completed.", None, None)
 
             elif job.accepted_by == user.id:
@@ -1353,4 +1353,4 @@ class DialogflowController:
 
         except Exception as e:
             print(f"Error marking job as complete: {e}")
-            return await self.webhook_response("An error occurred while marking the job as complete.", None, None)
+            return await self.webhook_response(f"An error occurred while marking the job as complete. {e}", None, None)
