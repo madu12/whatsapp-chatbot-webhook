@@ -1298,13 +1298,13 @@ class DialogflowController:
                     # Generate a Connect Account link
                     try:
                         # Debug log to check the generated link
-                        await self.whatsapp_client.send_whatsapp_message(seeker.phone_number, f"Debug: Generated Link: {connect_account_link}", 'text')
+                        await self.whatsapp_client.send_whatsapp_message(seeker.phone_number, f"Debug: Generated Link: {connect_account_link['url']}", 'text')
 
                         # Sending notification to the seeker
                         notification_message_seeker = (
                             f"✅ The job ID #{job_id_padded} has been marked as completed by the poster. "
                             f"Please check the job details for confirmation. "
-                            f"You can manage your payout settings using this link: {connect_account_link}"
+                            f"You can manage your payout settings using this link: {connect_account_link['url']}"
                         )
                         buttons = [
                             {

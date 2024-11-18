@@ -123,7 +123,7 @@ class StripeClient:
                 return_url=f"{self.website_url}",
                 type="account_onboarding"
             )
-            return account_link['url']
+            return account_link
         except stripe.error.StripeError as e:
             print(f"Error creating Stripe Connect Account link: {e.user_message}")
             raise e
