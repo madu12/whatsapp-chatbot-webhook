@@ -1293,13 +1293,10 @@ class DialogflowController:
 
                     # Generate a Connect Account link
                     connect_account_link = await self.stripe_client.create_connect_account_link(
-                        stripe_user_id=stripe_user_id
+                        account_id=stripe_user_id
                     )
                     # Generate a Connect Account link
                     try:
-                        # Debug log to check the generated link
-                        await self.whatsapp_client.send_whatsapp_message(seeker.phone_number, f"Debug: Generated Link: {connect_account_link['url']}", 'text')
-
                         # Sending notification to the seeker
                         notification_message_seeker = (
                             f"✅ The job ID #{job_id_padded} has been marked as completed by the poster. "
