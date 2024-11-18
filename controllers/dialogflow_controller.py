@@ -1309,6 +1309,8 @@ class DialogflowController:
                         )
                         payout_message = f"Payout of ${job.amount - job.posting_fee} has been initiated to your account. It may take 2-5 business days to reflect in your bank."
 
+                        # Generate a login link to manage their account
+                        login_link = self.stripe_client.create_login_link(stripe_user_id)
                     else:
                         # Account setup incomplete, generate setup (onboarding) link
                         setup_link = self.stripe_client.create_connect_account_link(account_id=stripe_user_id)
@@ -1316,9 +1318,6 @@ class DialogflowController:
                             "Complete your Stripe account setup to receive the payout. "
                             f"Use this link: {setup_link['url']}"
                         )
-
-                    # Generate a login link to manage their account
-                    login_link = self.stripe_client.create_login_link(stripe_user_id)
 
                     # Step 3: Notify the Seeker
                     notification_message_seeker = (
