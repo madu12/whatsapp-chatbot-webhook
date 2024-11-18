@@ -212,7 +212,7 @@ class StripeClient:
 
             if captured_payment and captured_payment['status'] == 'succeeded':
                 # Step 3: Create a top-up for the net amount to pay the job seeker
-                top_up = stripe.TopUp.create(
+                top_up = stripe.Topup.create(
                     amount=net_amount,
                     currency='usd',
                     description=f"Top-up for #{str(job_id).zfill(5)} job payout",
