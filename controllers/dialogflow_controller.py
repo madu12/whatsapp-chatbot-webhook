@@ -1289,7 +1289,7 @@ class DialogflowController:
                         stripe_user_id=stripe_user.stripe_user_id
 
                     # Generate a Connect Account link
-                    connect_account_link = await self.stripe_client.create_connect_account_link(
+                    connect_account_link = self.stripe_client.create_connect_account_link(
                         account_id=stripe_user_id
                     )
                     
@@ -1297,7 +1297,7 @@ class DialogflowController:
                     notification_message_seeker = (
                         f"✅ The job ID #{job_id_padded} has been marked as completed by the poster. "
                         f"Please check the job details for confirmation. "
-                        f"You can manage your payout settings using this link: {connect_account_link.url}"
+                        f"You can manage your payout settings using this link: {connect_account_link}"
                     )
                     buttons = [
                         {
@@ -1353,4 +1353,4 @@ class DialogflowController:
 
         except Exception as e:
             print(f"Error marking job as complete: {e}")
-            return await self.webhook_response(f"An error occurred while marking the job as complete. {e}", None, None)
+            return await self.webhook_response(f"An error occurred while marking the job as complete.", None, None)
