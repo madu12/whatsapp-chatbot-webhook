@@ -1280,33 +1280,53 @@ class DialogflowController:
                         connect_account = await self.stripe_client.create_connect_account()
                         
                         # Save the new Stripe Connect account to the database
-                        stripe_user = await StripeUserRepository.create_stripe_user(
+                        await StripeUserRepository.create_stripe_user(
                             user_id=seeker.id,
                             stripe_user_id=connect_account['id']
                         )
+                        stripe_user_id=connect_account['id']
+                    else:
+                        stripe_user_id=stripe_user.stripe_user_id
+
+                    # Debug log to ensure stripe_user_id is valid
+                    await self.whatsapp_client.send_whatsapp_message(seeker.phone_number, f"Debug: Stripe User ID: {stripe_user_id}", 'text')
 
                     # Generate a Connect Account link
                     connect_account_link = await self.stripe_client.create_connect_account_link(
-                        account_id=stripe_user.stripe_user_id,
+                        stripe_user_id=stripe_user_id
                     )
-                    # Sending notification to the seeker
-                    notification_message_seeker = (
-                        f"✅ The job ID #{job_id_padded} has been marked as completed by the poster. "
-                        f"Please check the job details for confirmation. "
-                        f"You can manage your payout settings using this link: {connect_account_link}"
-                    )
-                    buttons = [
-                        {
-                            "type": "reply",
-                            "reply": {
-                                "id": "My Jobs",
-                                "title": "My Jobs"
+                    # Generate a Connect Account link
+                    try:
+                        # Debug log to check the generated link
+                        await self.whatsapp_client.send_whatsapp_message(seeker.phone_number, f"Debug: Generated Link: {connect_account_link}", 'text')
+
+                        # Sending notification to the seeker
+                        notification_message_seeker = (
+                            f"✅ The job ID #{job_id_padded} has been marked as completed by the poster. "
+                            f"Please check the job details for confirmation. "
+                            f"You can manage your payout settings using this link: {connect_account_link}"
+                        )
+                        buttons = [
+                            {
+                                "type": "reply",
+                                "reply": {
+                                    "id": "My Jobs",
+                                    "title": "My Jobs"
+                                }
                             }
-                        }
-                    ]
+                        ]
+
+                        interactive_message = await self.create_button_message(notification_message_seeker, buttons)
+                        await self.whatsapp_client.send_whatsapp_message(seeker.phone_number, interactive_message, 'interactive')
                     
-                    interactive_message = await self.create_button_message(notification_message_seeker, buttons)
-                    await self.whatsapp_client.send_whatsapp_message(seeker.phone_number, interactive_message, 'interactive')
+                    except Exception as e:
+                        # Log and notify of any errors in generating the account link
+                        await self.whatsapp_client.send_whatsapp_message(
+                            user.phone_number,
+                            f"Error generating Stripe Connect account link: {str(e)}",
+                            'text'
+                        )
+                        print(f"Error in create_connect_account_link: {e}")
 
                 return await self.webhook_response(f"✅ Job ID #{job_id_padded} has been marked as completed.", None, None)
 
