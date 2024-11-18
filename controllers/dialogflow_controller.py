@@ -1275,29 +1275,39 @@ class DialogflowController:
 
                     # Check if seeker has a Stripe Connect account
                     stripe_user = await StripeUserRepository.get_stripe_user_by_user_id(seeker.id)
+
+                    # Step 1: Fetch or Create Stripe Connect Account
                     if not stripe_user:
-                        # Create a Stripe Connect account
+                        # Create a new Stripe Connect account
                         connect_account = await self.stripe_client.create_connect_account()
                         
-                        # Save the new Stripe Connect account to the database
+                        # Save the account details in the database
                         await StripeUserRepository.create_stripe_user(
                             user_id=seeker.id,
                             stripe_user_id=connect_account['id']
                         )
-                        stripe_user_id=connect_account['id']
+                        stripe_user_id = connect_account['id']
                     else:
-                        stripe_user_id=stripe_user.stripe_user_id
+                        stripe_user_id = stripe_user.stripe_user_id
 
-                    # Generate a Connect Account link
-                    connect_account_link = self.stripe_client.create_connect_account_link(
-                        account_id=stripe_user_id
-                    )
-                    
-                    # Sending notification to the seeker
+                    # Step 2: Check Account Setup Status
+                    account_details = await self.stripe_client.get_connected_account(stripe_user_id)
+                    if account_details['payouts_enabled'] and account_details['requirements']['disabled_reason'] is None:
+                        # Fully set up account, generate login link
+                        login_link = self.stripe_client.create_login_link(stripe_user_id)
+                        link_url = login_link['url']
+                        link_message = "Access your Stripe Express Dashboard using this link:"
+                    else:
+                        # Account setup incomplete, generate setup (onboarding) link
+                        setup_link = self.stripe_client.create_connect_account_link(account_id=stripe_user_id)
+                        link_url = setup_link['url']
+                        link_message = "Complete your Stripe account setup using this link:"
+
+                    # Step 3: Notify the Seeker
                     notification_message_seeker = (
                         f"✅ The job ID #{job_id_padded} has been marked as completed by the poster. "
                         f"Please check the job details for confirmation. "
-                        f"You can manage your payout settings using this link: {connect_account_link}"
+                        f"{link_message} {link_url}"
                     )
                     buttons = [
                         {
@@ -1308,7 +1318,7 @@ class DialogflowController:
                             }
                         }
                     ]
-
+                    
                     interactive_message = await self.create_button_message(notification_message_seeker, buttons)
                     await self.whatsapp_client.send_whatsapp_message(seeker.phone_number, interactive_message, 'interactive')
 

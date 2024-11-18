@@ -123,7 +123,7 @@ class StripeClient:
                 return_url=f"{self.website_url}",
                 type="account_onboarding"
             )
-            return account_link['url']
+            return account_link
         except stripe.error.StripeError as e:
             print(f"Error creating Stripe Connect Account link: {e.user_message}")
             raise e
@@ -151,3 +151,38 @@ class StripeClient:
         except Exception as e:
             print(f"Error verifying connected account: {e}")
             raise e
+    
+    async def get_connected_account(self, account_id):
+        """
+        Retrieve the Stripe Connected Account details.
+
+        Args:
+            account_id (str): Stripe account ID.
+
+        Returns:
+            dict: Stripe account details.
+        """
+        try:
+            account = stripe.Account.retrieve(account_id)
+            return account
+        except Exception as e:
+            print(f"Error retrieving connected account: {e}")
+            raise e
+        
+    def create_login_link(self, account_id):
+        """
+        Create a Stripe Connect Login Link for the Express Dashboard.
+
+        Args:
+            account_id (str): Stripe account ID.
+
+        Returns:
+            dict: Login link object containing the URL.
+        """
+        try:
+            login_link = stripe.Account.create_login_link(account_id)
+            return login_link
+        except Exception as e:
+            print(f"Error creating login link: {e}")
+            raise e
+
