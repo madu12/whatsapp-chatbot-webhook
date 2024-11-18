@@ -1284,10 +1284,13 @@ class DialogflowController:
                             user_id=seeker.id,
                             stripe_user_id=connect_account['id']
                         )
+                        stripe_user_id=connect_account['id']
+                    else:
+                        stripe_user_id=stripe_user.stripe_user_id
 
                     # Generate a Connect Account link
                     connect_account_link = await self.stripe_client.create_connect_account_link(
-                        stripe_user_id=stripe_user.stripe_user_id,
+                        stripe_user_id=stripe_user_id,
                         redirect_url=self.website_url
                     )
                     # Sending notification to the seeker
