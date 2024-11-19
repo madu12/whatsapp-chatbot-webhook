@@ -1293,55 +1293,56 @@ class DialogflowController:
                     # Step 1: Fetch or Create Stripe Connect Account
                     stripe_user = await StripeUserRepository.get_stripe_user_by_user_id(seeker.id)
                     if not stripe_user:
-                        # Generate setup (onboarding) link directly since account doesn't exist
-                        setup_link = self.stripe_client.create_connect_account_link()
+                        # Create a new Stripe Connect account
+                        connect_account = await self.stripe_client.create_connect_account()
+
+                        # Save the account details in the database
                         await StripeUserRepository.create_stripe_user(
                             user_id=seeker.id,
-                            stripe_user_id=setup_link['account'],
+                            stripe_user_id=connect_account['id']
                         )
-                        return await self.webhook_response(
-                            f"Complete your Stripe account setup to receive the payout. Use this link: {setup_link['url']}",
-                            None,
-                            None
-                        )
+                        stripe_user_id = connect_account['id']
                     else:
                         stripe_user_id = stripe_user.stripe_user_id
 
-                    # Step 2: Check Account Setup Status
-                    account_details = await self.stripe_client.get_connected_account(stripe_user_id)
-                    login_link = None
+                    # Account setup incomplete, generate setup (onboarding) link
+                    setup_link = self.stripe_client.create_connect_account_link(account_id=stripe_user_id)
+                    payout_message = (
+                        "Complete your Stripe account setup to receive the payout. "
+                        f"Use this link: {setup_link['url']}"
+                    )
 
                     # Step 2: Check Account Setup Status
                     account_details = await self.stripe_client.get_connected_account(stripe_user_id)
                     login_link = None
 
-                    if account_details['payouts_enabled'] and account_details['requirements']['disabled_reason'] is None:
-                        # Fully set up account, create payout
-                        payout = await self.stripe_client.create_payout(
-                            account_id=stripe_user_id,
-                            amount=job.amount,
-                            job_id=job.id,
-                            posting_fee=job.posting_fee
-                        )
-                        payout_message = f"Payout of ${job.amount - job.posting_fee} has been initiated to your account. It may take 2-5 business days to reflect in your bank."
+                    # if account_details['payouts_enabled'] and account_details['requirements']['disabled_reason'] is None:
+                    #     # Fully set up account, create payout
+                    #     payout = await self.stripe_client.create_payout(
+                    #         account_id=stripe_user_id,
+                    #         amount=job.amount,
+                    #         job_id=job.id,
+                    #         posting_fee=job.posting_fee
+                    #     )
+                    #     payout_message = f"Payout of ${job.amount - job.posting_fee} has been initiated to your account. It may take 2-5 business days to reflect in your bank."
 
-                        # Generate a login link to manage their account
-                        login_link = self.stripe_client.create_login_link(stripe_user_id)
-                    else:
-                        # Account setup incomplete, generate setup (onboarding) link
-                        setup_link = self.stripe_client.create_connect_account_link(account_id=stripe_user_id)
-                        payout_message = (
-                            "Complete your Stripe account setup to receive the payout. "
-                            f"Use this link: {setup_link['url']}"
-                        )
+                    #     # Generate a login link to manage their account
+                    #     login_link = self.stripe_client.create_login_link(stripe_user_id)
+                    # else:
+                    #     # Account setup incomplete, generate setup (onboarding) link
+                    #     setup_link = self.stripe_client.create_connect_account_link(account_id=stripe_user_id)
+                    #     payout_message = (
+                    #         "Complete your Stripe account setup to receive the payout. "
+                    #         f"Use this link: {setup_link['url']}"
+                    #     )
 
                     # Step 3: Notify the Seeker
                     notification_message_seeker = (
                         f"✅ The job ID #{job_id_padded} has been marked as completed by the poster. "
-                        f"{payout_message} "
+                        f"Payout of ${job.amount - job.posting_fee} has been initiated to your account. It may take 2-5 business days to reflect in your bank."
                     )
-                    if login_link:
-                        notification_message_seeker += f"Manage your Stripe account here: {login_link['url']}"
+                    # if login_link:
+                    #     notification_message_seeker += f"Manage your Stripe account here: {login_link['url']}"
 
                     buttons = [
                         {
@@ -1396,4 +1397,4 @@ class DialogflowController:
 
         except Exception as e:
             print(f"Error marking job as complete: {e}")
-            return await self.webhook_response(f"An error occurred while marking the job as complete.", None, None)
+            # return await self.webhook_response(f"An error occurred while marking the job as complete.", None, None)
