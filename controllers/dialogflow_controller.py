@@ -1293,17 +1293,23 @@ class DialogflowController:
                     # Step 1: Fetch or Create Stripe Connect Account
                     stripe_user = await StripeUserRepository.get_stripe_user_by_user_id(seeker.id)
                     if not stripe_user:
-                        # Create a new Stripe Connect account
-                        connect_account = await self.stripe_client.create_connect_account()
-
-                        # Save the account details in the database
+                        # Generate setup (onboarding) link directly since account doesn't exist
+                        setup_link = self.stripe_client.create_connect_account_link()
                         await StripeUserRepository.create_stripe_user(
                             user_id=seeker.id,
-                            stripe_user_id=connect_account['id']
+                            stripe_user_id=setup_link['account'],
                         )
-                        stripe_user_id = connect_account['id']
+                        return await self.webhook_response(
+                            f"Complete your Stripe account setup to receive the payout. Use this link: {setup_link['url']}",
+                            None,
+                            None
+                        )
                     else:
                         stripe_user_id = stripe_user.stripe_user_id
+
+                    # Step 2: Check Account Setup Status
+                    account_details = await self.stripe_client.get_connected_account(stripe_user_id)
+                    login_link = None
 
                     # Step 2: Check Account Setup Status
                     account_details = await self.stripe_client.get_connected_account(stripe_user_id)
